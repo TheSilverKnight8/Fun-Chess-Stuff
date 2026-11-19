@@ -18,6 +18,12 @@ export interface BoardProps {
   showLegal: boolean;
   showLast: boolean;
   onMove: (move: Move) => void;
+  /** Effects (Stage 2): pieces drop in at the start of a game. */
+  intro?: boolean;
+  /** Effects: a king that has fallen (checkmated: fast; resigned: slowly tipping over). */
+  fallen?: { color: Color; slow: boolean } | null;
+  /** Effects: the board drains to grey for a moment (a draw). */
+  drained?: boolean;
 }
 
 const PROMO_ORDER: PromoKind[] = ['Q', 'R', 'B', 'N'];
@@ -36,7 +42,7 @@ interface Drag {
   wasSelected: boolean;
 }
 
-export function Board({ pos, orientation, canMove, lastMove, showLegal, showLast, onMove }: BoardProps) {
+export function Board({ pos, orientation, canMove, lastMove, showLegal, showLast, onMove, intro = false, fallen = null, drained = false }: BoardProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [selected, setSelected] = useState<number | null>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
@@ -119,7 +125,10 @@ export function Board({ pos, orientation, canMove, lastMove, showLegal, showLast
     <div
       ref={ref}
       data-board={orientation}
-      className="game-surface relative aspect-square w-full touch-none overflow-hidden rounded-md border-[3px] border-navy bg-[var(--sq-light)] shadow-card [container-type:inline-size]"
+      className={cx(
+        'game-surface relative aspect-square w-full touch-none overflow-hidden rounded-md border-[3px] border-navy bg-[var(--sq-light)] shadow-card [container-type:inline-size]',
+        drained && 'animate-drain',
+      )}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
@@ -138,7 +147,7 @@ export function Board({ pos, orientation, canMove, lastMove, showLegal, showLast
             style={{ left: `${col * 12.5}%`, top: `${row * 12.5}%`, width: '12.5%', height: '12.5%', background: light ? 'var(--sq-light)' : 'var(--sq-dark)' }}
           >
             {isLast && <div className="absolute inset-0 bg-[var(--sq-last)]" />}
-            {checkSq === s && <div className="absolute inset-0 bg-[radial-gradient(circle,var(--accent)_0%,color-mix(in_srgb,var(--accent)_55%,transparent)_45%,transparent_72%)]" />}
+            {checkSq === s && <div className="animate-check-pulse absolute inset-0 bg-[radial-gradient(circle,var(--accent)_0%,color-mix(in_srgb,var(--accent)_55%,transparent)_45%,transparent_72%)]" />}
             {sel === s && <div className="absolute inset-0 bg-[var(--sq-selected)]" />}
             {hoverSquare === s && targets.has(s) && <div className="absolute inset-0 border-[3px] border-navy/70" />}
             {row === 7 && (
@@ -159,13 +168,20 @@ export function Board({ pos, orientation, canMove, lastMove, showLegal, showLast
       {pieces.map(({ p, s }) => {
         const { col, row } = place(s);
         const dragged = drag?.moving && drag.from === s;
+        const promoted = lastMove?.promo && lastMove.to === s && p.kind === lastMove.promo && p.id === pos.nextId - 1;
+        const down = fallen && p.kind === 'K' && p.color === fallen.color;
         return (
           <div
             key={p.id}
             className={cx('pointer-events-none absolute left-0 top-0 h-[12.5%] w-[12.5%] transition-transform duration-150 ease-out', dragged && 'opacity-30')}
             style={{ transform: `translate(${col * 100}%, ${row * 100}%)` }}
           >
-            <PieceArt color={p.color} kind={p.kind} className="h-full w-full" />
+            <div
+              className={cx('h-full w-full', intro && 'animate-drop-in', promoted && 'animate-promote', down && (fallen.slow ? 'animate-topple-slow' : 'animate-topple'))}
+              style={intro ? { animationDelay: `${(7 - row) * 70 + col * 12}ms` } : undefined}
+            >
+              <PieceArt color={p.color} kind={p.kind} className="h-full w-full" />
+            </div>
           </div>
         );
       })}

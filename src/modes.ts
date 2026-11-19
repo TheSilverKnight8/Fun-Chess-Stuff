@@ -1,6 +1,8 @@
 // The game modes in the spec (section 7), in the spec's order. Only Standard
 // Chess is built in Stage 1; the others show the stage they arrive in.
 
+import type { TrackId } from './lib/audio/music';
+
 export type ModeId = 'standard' | 'bastille' | 'pothole' | 'bario' | 'revival' | 'rental' | 'megaknight' | 'remorse';
 
 export interface ModeInfo {
@@ -26,3 +28,6 @@ export const MODES: ModeInfo[] = [
 ];
 
 export const modeInfo = (id: ModeId) => MODES.find((m) => m.id === id)!;
+
+/** Each mode's own game music (Caleb's answer: unique music per mode). Added as each mode is built. */
+export const MODE_TRACK: Partial<Record<ModeId, TrackId>> = { standard: 'standard' };

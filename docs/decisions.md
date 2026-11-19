@@ -6,8 +6,8 @@ The spec leaves these items to Claude Code (**[Claude Code]** in `SPEC.md`, and 
 
 Macro to micro, with a test checkpoint at the end of each stage. Each mode stage starts with that mode's rule questions and a proposal for its visual effects, for Caleb's review.
 
-1. **Foundation and Standard Chess:** the app shell in the Portal style; the board and piece art; click and drag input; the legal-move and last-move highlight settings; the full Standard rules with the section 6 draws; rooms by code, the room setup (mode, time control), random colors and clocks; resign with confirm, draw offers, disconnect forfeit with a reconnect grace period, Rematch and Back to mode pick; the installable app and publishing. **(this stage)**
-2. **Audio and Standard's effects:** the sound engine, music, and the capture, check and checkmate effects. The effects plan is shown to Caleb before it is built. This sets up how every later mode plugs in its own effects.
+1. **Foundation and Standard Chess:** the app shell in the Portal style; the board and piece art; click and drag input; the legal-move and last-move highlight settings; the full Standard rules with the section 6 draws; rooms by code, the room setup (mode, time control), random colors and clocks; resign with confirm, draw offers, disconnect forfeit with a reconnect grace period, Rematch and Back to mode pick; the installable app and publishing. **(done)**
+2. **Audio and Standard's effects:** the sound engine, music, and the capture, check and checkmate effects. The effects plan is shown to Caleb before it is built. This sets up how every later mode plugs in its own effects. **(this stage)**
 3. **Bastille and Pot-Hole.**
 4. **Remorse and Mega Knight.**
 5. **Bario and Rental.**
@@ -26,14 +26,16 @@ Macro to micro, with a test checkpoint at the end of each stage. Each mode stage
 | Draw offers | An offer stays open until it is accepted or declined, or the player it was made to moves. No limit on how often. |
 | Last-move highlight | On by default. |
 | Stage plan | Approved as proposed. |
+| App name (the spec's title is a working title) | "Fun Chess Stuff" is fine for now. |
+| Timeout against insufficient material: which test? | The own-pieces test: a draw when the side with time left could not mate with its own pieces (a lone king, a king and one knight, or a king and bishops all on one color). This is looser than FIDE's "any series of legal moves" test; for example, a king and knight against a king and queen is a draw here. |
+| Leaving on purpose during a game | Keep the instant forfeit: leaving with the Leave button (after a confirm) forfeits at once, without the grace period. Closing or reloading the tab counts as a lost connection. |
+| Stage 2 effects (Claude Code's proposal for Standard Chess: captures, check, checkmate, plus every move, castling, promotion, game start, draws, low time and timeout, resignation, and small sounds) | All of them. |
+| Music | Unique music: each mode gets its own game track, plus the menu theme. |
+| The phone's or computer's "reduce motion" setting | Do not follow it: the effects always play in full. |
 
 ## Questions for Caleb (from Stage 1)
 
-| Question | What Stage 1 does until answered |
-| --- | --- |
-| **App name.** The spec calls its title a working title. | The repository's name, **Fun Chess Stuff**, everywhere (header, Home, the installed app). It is one line in `src/config.ts` plus the name in `vite.config.ts` and `index.html`. |
-| **Timeout against insufficient material: which test?** The answer was "a draw with insufficient material". Stage 1 asks whether the side *with time left* could checkmate with its own pieces: a lone king, a king and one knight, or a king and bishops all on one color of square cannot, so the game is a draw. FIDE's rule is stricter: it asks whether *any* series of legal moves could end in mate, counting the flagged player's pieces as possible blockers. So, for example, a king and knight against a king and queen is a draw here but a loss on time under FIDE (a mate with the queen blocking is possible in theory). | The own-pieces test above. |
-| **Leaving on purpose during a game.** The spec says the disconnected player forfeits, with a reconnect grace period. Leaving the room on purpose (the Leave button, after a confirm) is not a lost connection. | Leaving on purpose forfeits at once, without the grace period. Closing or reloading the tab counts as a lost connection (the grace period applies, but a reloaded page cannot rejoin, because nothing is saved). |
+All answered (see above).
 
 ## Builder's additions in Stage 1 (not named in the spec; easy to remove)
 
@@ -42,7 +44,13 @@ Macro to micro, with a test checkpoint at the end of each stage. Each mode stage
 - **Pieces slide** to their new square instead of jumping (Stage 2 adds the real effects).
 - **A Leave button during the game** (asks first, because leaving forfeits). The spec only names the end-of-game choices.
 - **A third player** trying the code is told the room already has its players.
-- **"Stage N" tags** on the modes that are not built yet, and on the music and effects volume settings (Stage 2). The tags go away as the stages land.
+- **"Stage N" tags** on the modes that are not built yet. The tags go away as the stages land. (The volume settings had one until Stage 2.)
+
+## Builder's additions in Stage 2 (not named in the spec or the approved effects list; easy to remove)
+
+- **Button click sounds** on the menus, as in Stickman Arena.
+- **A win or loss sting** for the endings that have no sound of their own in the effects list (out of time, resignation, a disconnect, leaving).
+- **The effects volume slider plays a sample capture** when it is let go, so the level can be heard.
 
 ## Platform
 
@@ -65,7 +73,7 @@ Macro to micro, with a test checkpoint at the end of each stage. Each mode stage
 | Lost connection | No message for 6 seconds (a heartbeat goes every second) means the connection is lost. The player's seat is held for **30 seconds** (the reconnect grace period); the guest's device keeps trying to get back in during that time. Both screens show the countdown. If they do not come back, they forfeit. | Spec: "the disconnected player forfeits"; grace period left to Claude Code. |
 | Clocks during the grace period | Keep running. If the away player's clock runs out first, the timeout rules apply. | The clock is part of the game; pausing it would let a player stop the clock by dropping out. |
 | Who was disconnected? | A device that could not reach the room server, or that was asleep (a phone app in the background) for longer than the grace period, counts as the one that disconnected. A guest that reaches the server but not the host counts the host as disconnected. | Both screens should agree on the result where they can. |
-| Leaving | Leaving on purpose forfeits at once (see Questions). The browser's back button leaves the same way, without the confirm. If the guest leaves, the room stays open with the same code and a new player can join. If the host leaves, the room closes. | |
+| Leaving | Leaving on purpose forfeits at once (Caleb's answer). The browser's back button leaves the same way, without the confirm. If the guest leaves, the room stays open with the same code and a new player can join. If the host leaves, the room closes. | |
 | Seat | The guest gets a seat token on joining; only that token can come back into the seat during the grace period. | So nobody else can take the seat of a player who is reconnecting. |
 
 **Free-plan check:** the PeerJS cloud server publishes no limit and no uptime promise. For two friends playing it is very unlikely to matter, but if it is ever down, rooms cannot be created. The fallback would be running our own copy of the signaling server; ask before doing that.
@@ -88,7 +96,7 @@ Macro to micro, with a test checkpoint at the end of each stage. Each mode stage
 | Order | After every move: checkmate (it stands even if the same move completes a repetition or the hundredth half-move), then stalemate, insufficient material, threefold repetition, the fifty-move rule. |
 | Same position (repetition) | Same side to move, same pieces on the same squares, same castling rights, and an en passant capture possible in both or neither (the en passant square only counts when the capture is really legal). This is FIDE's definition. |
 | Insufficient material (whole board) | No pawns, rooks or queens left, and the minor pieces are none, a single knight, or bishops that all stand on one color of square (K v K, K+N v K, K+B v K, K+B v K+B with same-colored bishops, and so on). The game ends at once. |
-| Timeout test | See Questions: the side with time left cannot mate with its own pieces (lone king, king and one knight, king and bishops on one color). |
+| Timeout test | Caleb's answer: the side with time left cannot mate with its own pieces (lone king, king and one knight, king and bishops on one color). |
 | Draw offers | Either player can offer at any time, on either turn. The offer is open until it is accepted or declined, or the player it was made to moves. One offer can be open at a time. |
 | Resign | A confirm window first ("Resign?"), as the spec says. |
 
@@ -111,8 +119,44 @@ Macro to micro, with a test checkpoint at the end of each stage. Each mode stage
 - Pieces (`src/board/PieceArt.tsx`): classic Staunton outlines drawn like the Portal's tool illustrations, with flat fills, rounded navy outlines and a few inner construction lines. White pieces are cream with navy lines; Black pieces are navy with cream inner lines and a thin cream edge so their parts read apart.
 - App icon: a cream knight on navy with the Portal's staggered stripes (cream, red, cream).
 
+## Sound and music (Stage 2)
+
+- All sound is made in the browser with the Web Audio API (`src/lib/audio/`), the same engine as Stickman Arena. There are no audio files.
+- Sound starts after the first tap or key press (a browser rule) and pauses while the app is in the background. Music and effects have their own volume (Settings; defaults 50% and 80%).
+- Music (Caleb's answer: unique music per mode, plus the menu theme):
+  - **Opening**, the menu theme: light and playful, F major, 112 beats a minute, a plucked square-wave lead. Plays on Home, Settings and the room setup.
+  - **Gambit**, Standard Chess: thoughtful but driving, A minor, 100 beats a minute, a soft triangle lead over a pulsing bass.
+  - **Tension layer** (game tracks): four-on-the-floor kicks, running hats and a sawtooth arpeggio fade in while a king is in check or a running clock is under 30 seconds, and fade out when that ends.
+  - Each later mode gets its own game track in its own stage (`MODE_TRACK` in `src/modes.ts`).
+- Effects: a wooden clack for a move; a double clack for castling; a crunch for a capture, heavier for a more valuable piece (pawn 1, knight and bishop 3, rook 5, queen 9; rook and queen add a deep thud); a sharp alarm sting for check; for checkmate a big impact, then a short fanfare on the winner's screen and a low falling sting on the loser's; a rising arpeggio for promotion; a start chime; a neutral chord for every draw; a buzzer when a clock reaches zero; a tick each second in the last ten seconds of your own running clock; a thud for a resigning king; short sounds for a draw offer arriving, the opponent joining the room, and a connection dropping or coming back.
+
+## Effects: Standard Chess (Stage 2)
+
+Proposed by Claude Code, approved by Caleb ("all effects"). Display only: nothing here touches the game, the clocks or what is sent between players, and nothing waits for an effect before you can move. Drawn on two full-screen canvases (one behind the board for the checkmate rays, one in front for everything else) plus CSS animations on the board (`src/effects/`, `src/board/Board.tsx`, `src/index.css`). Caleb's answer: the system "reduce motion" setting is not followed; effects always play in full.
+
+| Moment | Effect |
+| --- | --- |
+| Every move | The piece slides (0.15 s); a navy ink ring spreads where it lands. |
+| Capture | The captured piece stays on its square until the attacker arrives, then a split-second freeze with a cream flash, then it breaks into flat triangular shards in its own colors that fly off and fall with gravity. A red star-burst on the square. The screen shakes, harder for a more valuable piece. |
+| Check | A red glowing line shoots from each checking piece to the king, the board's frame flashes red, a red burst at the king, a small shake. The king's square pulses red while the check lasts. |
+| Checkmate | The check line, then a version of Stickman Arena's kill spark: behind the board the whole screen floods with slowly turning rays in the winner's color (cream for White, navy for Black) and red, a navy and cream ring bursts from the mated king, the screen shakes hard, and the Portal's staggered stripes sweep across the screen with CHECKMATE on the navy band. The mated king topples onto its side and stays down. About two seconds in all. |
+| Castling | King and rook slide together with speed lines (navy and red) behind them, a ring under the rook, a small shake. |
+| Promotion | Navy and red stripes rise up from below into the promotion square, then the new piece bursts out (it grows in with a bounce) with a red and a navy star-burst. |
+| Game start | The pieces drop onto the board from above, row by row from your side, with a bounce; thin staggered stripes sweep across the screen. |
+| Draws (every kind) | The board drains to grey for a moment; the stripes sweep across with the draw's name (Stalemate, Threefold repetition, Fifty-move rule, Insufficient material, Draw agreed, Out of time · Draw). |
+| Low time | In the last ten seconds a running clock turns red and pulses. |
+| Out of time | The empty clock flashes, jolts, and stays red with a cream crack across its face. |
+| Resignation | The resigning player's king slowly tips over and stays down. |
+
 ## Testing (Stage 1)
 
 - `npm run check:rules`: move generation matches the published perft counts (Chess Programming Wiki) for the start position and five standard test positions, up to depth 4; and every ending above is checked on hand-made positions.
 - While building, 400 random games (135,409 positions) were compared move by move with python-chess, an independent chess library: the legal moves, check, checkmate, stalemate, repetition and fifty-move results all matched.
 - A two-browser run through a local signaling server (`npm run peer`): joining with a lowercase code, a third player turned away, live setup on the guest, click and drag moves, illegal and out-of-turn moves refused, fool's mate, host-only rematch with colors swapped, draw offer declined, offered again and accepted, an offer lapsing when the receiver moves, resign with confirm, promotion through the picker, Back to mode pick, a cut connection reconnecting within the grace period, leaving mid-game, a new player joining after, a player who never comes back forfeiting (about 36 seconds: up to 6 to notice, then 30), a 1+0 game lost on time, and the host leaving mid-game.
+
+## Testing (Stage 2)
+
+- `npm run check:rules` also checks that the pieces found to be giving check (used by the check effect) agree with the check test, over 6,643 positions.
+- Frames of every effect were captured in two browsers (computer and phone layouts) and checked by eye: the start drop and sweep, capture shards and flash, check lines and frame flash, castling streaks, promotion, checkmate rays, banner and toppled king, the draw drain and banner, low time, the cracked clock, and the resigning king.
+- The Stage 1 two-browser test was run again with the effects in: all checks passed. No errors in either browser's console.
+- The sounds and music could not be listened to from the build machine; they are made the same way as Stickman Arena's.

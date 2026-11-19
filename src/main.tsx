@@ -5,9 +5,12 @@ import '@fontsource-variable/archivo';
 import '@fontsource-variable/jetbrains-mono';
 import './index.css';
 import App from './App';
+import { attachAudio } from './lib/audio/engine';
 
 // Installs the service worker. New versions activate on the next app launch.
 if (!import.meta.env.DEV) registerSW({ immediate: true });
+
+attachAudio();
 
 // Development only: lets automated tests look inside the running app.
 if (import.meta.env.DEV) {

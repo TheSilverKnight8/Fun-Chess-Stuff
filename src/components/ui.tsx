@@ -2,6 +2,7 @@ import { forwardRef, type ButtonHTMLAttributes, type InputHTMLAttributes, type R
 import { Link, type LinkProps } from 'react-router';
 import { ChevronDown, Loader2 } from 'lucide-react';
 import { twMerge } from 'tailwind-merge';
+import { sfx } from '../lib/audio/sfx';
 
 /** Joins class names. When two classes set the same thing (h-11 and h-9), the later one wins. */
 export function cx(...parts: (string | false | null | undefined)[]) {
@@ -47,19 +48,38 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
-  { variant, size, loading, press, className, children, disabled, type = 'button', ...rest },
+  { variant, size, loading, press, className, children, disabled, type = 'button', onClick, ...rest },
   ref,
 ) {
   return (
-    <button ref={ref} type={type} className={buttonClass(variant, size, className, press)} disabled={disabled || loading} {...rest}>
+    <button
+      ref={ref}
+      type={type}
+      className={buttonClass(variant, size, className, press)}
+      disabled={disabled || loading}
+      onClick={(e) => {
+        sfx.click();
+        onClick?.(e);
+      }}
+      {...rest}
+    >
       {loading && <Loader2 className="size-4 animate-spin" />}
       {children}
     </button>
   );
 });
 
-export function ButtonLink({ variant, size, press, className, ...rest }: LinkProps & { variant?: Variant; size?: Size; press?: boolean }) {
-  return <Link className={buttonClass(variant, size, className, press)} {...rest} />;
+export function ButtonLink({ variant, size, press, className, onClick, ...rest }: LinkProps & { variant?: Variant; size?: Size; press?: boolean }) {
+  return (
+    <Link
+      className={buttonClass(variant, size, className, press)}
+      onClick={(e) => {
+        sfx.click();
+        onClick?.(e);
+      }}
+      {...rest}
+    />
+  );
 }
 
 export function IconButton({ label, className, children, ...rest }: ButtonHTMLAttributes<HTMLButtonElement> & { label: string }) {
