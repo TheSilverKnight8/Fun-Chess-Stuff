@@ -1,0 +1,6 @@
+/** The app's icon: a cream knight on navy with the Portal's staggered stripes. Same drawing as public/favicon.svg. */
+export const APP_MARK_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="12" fill="#002657"/><rect x="38" y="10" width="18" height="3.6" fill="#faeeda"/><rect x="44" y="16.2" width="12" height="3.6" fill="#fc3f3f"/><rect x="41" y="22.4" width="15" height="3.6" fill="#faeeda"/><g transform="translate(6.5 7) scale(0.5)" stroke-linecap="round" stroke-linejoin="round"><path d="M22 89h56a3 3 0 0 0 3-3v-3a5 5 0 0 0-5-5H24a5 5 0 0 0-5 5v3a3 3 0 0 0 3 3z" fill="#faeeda"/><path d="M29 78c1-10 6-17 13-23-5 2-10 3-15 2-5-1-9-5-8-10 0-4 4-7 8-10 6-5 10-11 13-18l3-9 5 7 4-6 3 9c11 6 18 18 19 33 1 11-1 19-3 25z" fill="#faeeda"/><path d="M58 16c9 7 13 19 13 33M45 47c-2 4-2 7 0 9" fill="none" stroke="#002657" stroke-width="4"/><circle cx="41" cy="31" r="4" fill="#002657"/></g></svg>`;
+
+export function AppMark({ size = 32, className = '' }: { size?: number; className?: string }) {
+  return <span className={className} style={{ display: 'inline-block', width: size, height: size }} dangerouslySetInnerHTML={{ __html: APP_MARK_SVG.replace('<svg ', `<svg width="${size}" height="${size}" `) }} aria-hidden />;
+}
