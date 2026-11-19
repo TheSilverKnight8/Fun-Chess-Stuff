@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { DoorOpen, LogIn, Settings as SettingsIcon } from 'lucide-react';
+import { useMusic } from '../lib/audio/useMusic';
 import { PageLayout } from '../components/Layout';
 import { Button, ButtonLink, Card } from '../components/ui';
 import { APP_NAME } from '../config';
@@ -11,6 +12,7 @@ export function Home() {
   const navigate = useNavigate();
   const [code, setCode] = useState('');
   const [problem, setProblem] = useState<string | null>(null);
+  useMusic('menu');
 
   const join = (e: React.FormEvent) => {
     e.preventDefault();

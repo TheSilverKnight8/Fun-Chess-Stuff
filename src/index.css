@@ -43,6 +43,16 @@
   --animate-rise: rise 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) both;
   --animate-fade: fade 0.25s ease both;
   --animate-pop: pop 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.3) both;
+
+  /* Game effects (Stage 2). */
+  --animate-drop-in: drop-in 0.42s cubic-bezier(0.3, 1.4, 0.5, 1) both;
+  --animate-promote: promote 0.5s cubic-bezier(0.2, 1.6, 0.4, 1) 0.42s both;
+  --animate-topple: topple 0.55s cubic-bezier(0.5, 0, 0.6, 1.5) 0.4s both;
+  --animate-topple-slow: topple 1.3s cubic-bezier(0.6, 0, 0.7, 1.25) both;
+  --animate-drain: drain 2s ease both;
+  --animate-check-pulse: check-pulse 0.7s ease-in-out infinite alternate;
+  --animate-clock-low: clock-low 0.5s ease-in-out infinite alternate;
+  --animate-clock-crack: clock-crack 0.6s ease-out both;
 }
 
 @keyframes rise {
@@ -62,6 +72,94 @@
   }
   to {
     opacity: 1;
+  }
+}
+
+/* A piece dropped onto the board from above, with a bounce. */
+@keyframes drop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-160%) scale(1.15);
+  }
+  60% {
+    opacity: 1;
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* The promoted piece bursts out of the stripes. */
+@keyframes promote {
+  from {
+    opacity: 0;
+    transform: scale(0.1);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* A king falls on its side and stays down. */
+@keyframes topple {
+  from {
+    transform: none;
+  }
+  to {
+    transform: translate(12%, 16%) rotate(-84deg) scale(0.86);
+  }
+}
+
+/* A draw: the board drains to grey for a moment. */
+@keyframes drain {
+  0% {
+    filter: none;
+  }
+  20%,
+  60% {
+    filter: grayscale(1) brightness(0.92);
+  }
+  100% {
+    filter: none;
+  }
+}
+
+@keyframes check-pulse {
+  from {
+    opacity: 0.55;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* The last ten seconds on a running clock. */
+@keyframes clock-low {
+  from {
+    background-color: var(--accent);
+    transform: none;
+  }
+  to {
+    background-color: var(--danger);
+    transform: scale(1.06);
+  }
+}
+
+/* A clock that ran out: a red flash, then it stays cracked. */
+@keyframes clock-crack {
+  0% {
+    background-color: var(--surface);
+    transform: scale(1.25);
+  }
+  30% {
+    background-color: var(--accent);
+    transform: scale(0.95) rotate(-3deg);
+  }
+  100% {
+    background-color: var(--danger);
+    transform: none;
   }
 }
 
@@ -268,11 +366,4 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    transition-duration: 0.01ms !important;
-  }
-}
+/* Caleb's answer: the app does not follow the system's "reduce motion" setting; the effects always play in full. */

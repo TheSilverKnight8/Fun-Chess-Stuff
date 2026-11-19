@@ -1,12 +1,15 @@
 import type { ReactNode } from 'react';
 import { Footprints, Moon, Music, RotateCcw, Sparkles, Volume2 } from 'lucide-react';
+import { useMusic } from '../lib/audio/useMusic';
 import { PageLayout, PageTitle } from '../components/Layout';
-import { Button, Card, Chip, Segmented } from '../components/ui';
+import { Button, Card, Segmented } from '../components/ui';
+import { sfx } from '../lib/audio/sfx';
 import { DEFAULT_SETTINGS, updateSettings, useSettings } from '../lib/settings';
 
 /** Settings (spec section 4). Nothing is saved, so they go back to the defaults when the app closes. */
 export function SettingsPage() {
   const s = useSettings();
+  useMusic('menu');
   return (
     <PageLayout back={{ to: '/', label: 'Home' }}>
       <PageTitle eyebrow="Settings" title="Settings">
@@ -28,8 +31,8 @@ export function SettingsPage() {
           onChange={(v) => updateSettings({ lastMove: v })}
           help="Marks the two squares of the last move."
         />
-        <Later icon={<Music className="size-5" />} label="Music volume" />
-        <Later icon={<Volume2 className="size-5" />} label="Effects volume" />
+        <Slider icon={<Music className="size-5" />} label="Music volume" value={s.musicVolume} onChange={(v) => updateSettings({ musicVolume: v })} />
+        <Slider icon={<Volume2 className="size-5" />} label="Effects volume" value={s.effectsVolume} onChange={(v) => updateSettings({ effectsVolume: v })} onRelease={() => sfx.capture(3)} />
       </Card>
       <Button className="mt-5" press onClick={() => updateSettings({ ...DEFAULT_SETTINGS })}>
         <RotateCcw className="size-4" />
@@ -39,7 +42,22 @@ export function SettingsPage() {
   );
 }
 
-function Slider({ icon, label, value, min = 0, onChange }: { icon: ReactNode; label: string; value: number; min?: number; onChange: (v: number) => void }) {
+function Slider({
+  icon,
+  label,
+  value,
+  min = 0,
+  onChange,
+  onRelease,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: number;
+  min?: number;
+  onChange: (v: number) => void;
+  /** Effects volume: plays a sample when the slider is let go. */
+  onRelease?: () => void;
+}) {
   const pct = Math.round(value * 100);
   const fill = ((value - min) / (1 - min)) * 100;
   return (
@@ -55,6 +73,8 @@ function Slider({ icon, label, value, min = 0, onChange }: { icon: ReactNode; la
         value={value}
         style={{ ['--fill' as string]: `${fill}%` }}
         onChange={(e) => onChange(Number(e.target.value))}
+        onPointerUp={onRelease}
+        onKeyUp={onRelease}
         aria-label={label}
       />
       <span className="w-12 shrink-0 text-right font-mono text-sm text-muted">{pct}%</span>
@@ -79,17 +99,6 @@ function Toggle({ icon, label, value, onChange, help }: { icon: ReactNode; label
         />
       </div>
       <p className="mt-2 text-sm text-muted">{help}</p>
-    </div>
-  );
-}
-
-/** A setting that arrives with a later stage. */
-function Later({ icon, label }: { icon: ReactNode; label: string }) {
-  return (
-    <div className="flex items-center gap-4 px-5 py-4 opacity-60">
-      <span className="text-muted">{icon}</span>
-      <span className="w-36 shrink-0 font-display text-lg uppercase tracking-wide">{label}</span>
-      <Chip>Stage 2</Chip>
     </div>
   );
 }

@@ -140,6 +140,49 @@ function slides(board: (Piece | null)[], tf: number, tr: number, dirs: readonly 
   return false;
 }
 
+/** Does the piece on `from` attack `target`? */
+export function attacks(board: (Piece | null)[], from: number, target: number): boolean {
+  const p = board[from];
+  if (!p || from === target) return false;
+  const df = fileOf(target) - fileOf(from);
+  const dr = rankOf(target) - rankOf(from);
+  switch (p.kind) {
+    case 'P':
+      return Math.abs(df) === 1 && dr === (p.color === 'w' ? 1 : -1);
+    case 'N':
+      return (Math.abs(df) === 1 && Math.abs(dr) === 2) || (Math.abs(df) === 2 && Math.abs(dr) === 1);
+    case 'K':
+      return Math.max(Math.abs(df), Math.abs(dr)) === 1;
+    default: {
+      const straight = df === 0 || dr === 0;
+      const diagonal = Math.abs(df) === Math.abs(dr);
+      if ((p.kind === 'R' && !straight) || (p.kind === 'B' && !diagonal) || (p.kind === 'Q' && !straight && !diagonal)) return false;
+      const sf = Math.sign(df);
+      const sr = Math.sign(dr);
+      let f = fileOf(from) + sf;
+      let r = rankOf(from) + sr;
+      while (f !== fileOf(target) || r !== rankOf(target)) {
+        if (board[sq(f, r)]) return false;
+        f += sf;
+        r += sr;
+      }
+      return true;
+    }
+  }
+}
+
+/** The squares of the pieces giving check to the side to move. */
+export function checkers(pos: Position): number[] {
+  const k = findKing(pos, pos.turn);
+  if (k < 0) return [];
+  const out: number[] = [];
+  for (let s = 0; s < 64; s++) {
+    const p = pos.board[s];
+    if (p && p.color !== pos.turn && attacks(pos.board, s, k)) out.push(s);
+  }
+  return out;
+}
+
 export function inCheck(pos: Position, color: Color = pos.turn): boolean {
   const k = findKing(pos, color);
   return k >= 0 && isAttacked(pos.board, k, other(color));

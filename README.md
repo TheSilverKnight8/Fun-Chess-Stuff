@@ -6,7 +6,7 @@ It is an installable web app (PWA) for phones and computers, hosted on GitHub Pa
 
 The app is built in stages, each tried before the next starts. What the app does is in [`SPEC.md`](SPEC.md) (Caleb's spec); the stage plan and every choice left to the builder are in [`docs/decisions.md`](docs/decisions.md).
 
-## What is in it so far (Stage 1)
+## What is in it so far (Stages 1 and 2)
 
 | Area | What it does |
 | --- | --- |
@@ -15,7 +15,9 @@ The app is built in stages, each tried before the next starts. What the app does
 | Standard Chess | Full orthodox rules: castling, en passant, promotion with a piece picker, check and checkmate. Draws by stalemate, threefold repetition, the fifty-move rule and insufficient material end the game by themselves; draw offers and resignation (with a confirm). Running out of time loses, or draws if the opponent cannot checkmate. |
 | Playing | Click a piece then a square, or drag it. Your color is at the bottom with "You are White/Black" beside it. Colors are random; Rematch swaps them. Only the host chooses Rematch or Back to mode pick. |
 | Connection | Game data goes directly between the two devices (WebRTC); the free PeerJS server only introduces them. A player who loses connection has 30 seconds to come back before they forfeit. |
-| Settings | Brightness, legal-move dots, last-move highlight. Kept until the app closes. Music and effects come in Stage 2. |
+| Effects | Standard Chess: shattering captures, check lines, a full-screen checkmate burst with a falling king, castling streaks, promotion stripes, pieces dropping in at the start, draws that drain the board to grey, a pulsing and cracking clock, a tipping king on resignation. |
+| Sound | Music and sound effects made in the browser; no audio files. A menu theme and Standard Chess's own track, which gets tenser during check and low time. |
+| Settings | Brightness, music volume, effects volume, legal-move dots, last-move highlight. Kept until the app closes. |
 
 ## Run it on your computer
 
@@ -69,6 +71,8 @@ src/
   game/         a game in a room: clocks, draw offers, results; the room session (host is the referee)
   net/          rooms: codes, PeerJS connection, heartbeat, seat tokens for reconnecting
   board/        the board (input, highlights, promotion picker) and the piece drawings
+  effects/      the game's visual effects (what happened in the game → what to draw)
+  lib/audio/    sound engine, sound effects, music
   pages/        Home, the room (setup and game), Settings
   components/   page frames, buttons, dialogs
   graphics/     app icon, Croswell Industries logo

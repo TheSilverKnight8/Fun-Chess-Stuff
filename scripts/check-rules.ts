@@ -3,7 +3,7 @@
 //     from well-known test positions and compares with the published counts.
 //  2. The section 6 draws, checkmate, and the timeout rule on hand-made positions.
 
-import { fromFen, legalMoves, play, startPosition } from '../src/chess/standard.ts';
+import { checkers, fromFen, inCheck, legalMoves, play, startPosition } from '../src/chess/standard.ts';
 import { deadPosition, newBoardGame, playMove, sideCannotMate, type BoardGame } from '../src/chess/status.ts';
 import { parseSquare, type Position } from '../src/chess/types.ts';
 
@@ -40,6 +40,24 @@ for (const t of PERFT) {
     const got = perft(pos, i + 1);
     check(got === want, `${t.name} depth ${i + 1}: ${got} (expected ${want}, ${Math.round(performance.now() - t0)} ms)`);
   });
+}
+
+// The pieces giving check (used by the check effect) agree with the check test,
+// over every position three moves deep from the test positions.
+{
+  let positions = 0;
+  let mismatches = 0;
+  let checks = 0;
+  const walk = (pos: Position, depth: number) => {
+    positions++;
+    const c = checkers(pos);
+    if (c.length > 0) checks++;
+    if ((c.length > 0) !== inCheck(pos)) mismatches++;
+    if (depth === 0) return;
+    for (const m of legalMoves(pos)) walk(play(pos, m), depth - 1);
+  };
+  for (const t of PERFT) walk(fromFen(t.fen), 2);
+  check(mismatches === 0, `checking pieces agree with the check test (${positions} positions, ${checks} in check)`);
 }
 
 // ---------------------------------------------------------------- endings

@@ -2,7 +2,13 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 're
 import { useNavigate } from 'react-router';
 import { Check, Flag, Handshake, Loader2, LogOut, Play, RefreshCw, Swords, UserRound, WifiOff } from 'lucide-react';
 import { Board } from '../board/Board';
+import { EffectsLayer } from '../effects/EffectsLayer';
+import { useClockTicks, useGameFx } from '../effects/useGameFx';
+import { setTension } from '../lib/audio/music';
+import { sfx } from '../lib/audio/sfx';
+import { useMusic } from '../lib/audio/useMusic';
 import { PieceArt } from '../board/PieceArt';
+import { inCheck } from '../chess/standard';
 import { COLOR_NAME, other, type Color } from '../chess/types';
 import { PageLayout, PageTitle, PlayLayout } from '../components/Layout';
 import { RoomCodeCard, useLeaveOnUnmount } from '../components/RoomBits';
@@ -26,7 +32,7 @@ import {
 import { CUSTOM_LIMITS, PRESETS, formatClock, sameTime, timeLabel, type TimeControl } from '../game/time';
 import { useSettings } from '../lib/settings';
 import { useStore } from '../lib/store';
-import { MODES, modeInfo } from '../modes';
+import { MODES, MODE_TRACK, modeInfo } from '../modes';
 
 /** The room: the host's setup (mode and time control), then the game. */
 export function RoomPage() {
@@ -41,6 +47,13 @@ export function RoomPage() {
     }
   }, [s.notice]);
 
+  // A sound when the opponent comes into the room.
+  const wasHere = useRef(s.opponentHere);
+  useEffect(() => {
+    if (s.opponentHere && !wasHere.current && s.phase === 'setup') sfx.join();
+    wasHere.current = s.opponentHere;
+  }, [s.opponentHere, s.phase]);
+
   const leave = async () => {
     if (gameInProgress() && !(await confirmDialog({ title: 'Leave the game?', body: 'Leaving now forfeits the game: your opponent wins.', confirm: 'Leave', danger: true }))) return;
     leaveRoom();
@@ -53,6 +66,7 @@ export function RoomPage() {
 }
 
 function Connecting({ s }: { s: RoomScreen }) {
+  useMusic('menu');
   return (
     <PageLayout back={{ to: '/', label: 'Home' }}>
       <PageTitle eyebrow="Room" title={s.status === 'connecting' ? (s.role === 'host' ? 'Making a room' : 'Joining') : 'No room'} />
@@ -78,6 +92,7 @@ function Connecting({ s }: { s: RoomScreen }) {
 // ---------------------------------------------------------------- setup (mode pick)
 
 function SetupScreen({ s }: { s: RoomScreen }) {
+  useMusic('menu');
   const host = s.role === 'host';
   return (
     <PageLayout back={{ to: '/', label: 'Leave room' }}>
@@ -117,7 +132,10 @@ function SetupScreen({ s }: { s: RoomScreen }) {
                     key={m.id}
                     type="button"
                     disabled={!host || locked}
-                    onClick={() => setSetup({ mode: m.id })}
+                    onClick={() => {
+                      sfx.click();
+                      setSetup({ mode: m.id });
+                    }}
                     className={cx(
                       'flex items-start gap-3 rounded-xl border-2 px-4 py-3 text-left transition',
                       chosen ? 'border-navy bg-raised' : 'border-line bg-surface',
@@ -170,7 +188,10 @@ function TimePicker({ value, host }: { value: TimeControl; host: boolean }) {
     <button
       key={key}
       type="button"
-      onClick={onClick}
+      onClick={() => {
+        sfx.click();
+        onClick();
+      }}
       className={cx('h-11 rounded-xl border-2 font-display text-lg uppercase transition', chosen ? 'border-navy bg-navy text-on-accent' : 'border-line bg-surface hover:border-navy/50')}
     >
       {label}
@@ -270,6 +291,9 @@ function GameScreen({ s, game, onLeave }: { s: RoomScreen; game: GameView; onLea
   const running = !over && !!game.clock?.running;
   useTicker(running || (!!game.away && !over) || s.reconnecting !== null);
   const [box, size] = useSize<HTMLDivElement>();
+  const shakeRef = useRef<HTMLDivElement>(null);
+  useMusic(MODE_TRACK[game.mode] ?? null);
+  useGameFx(game, me, s.reconnecting !== null);
 
   const landscape = size.w >= 700 && size.w >= size.h * 1.15;
   const PANEL = 340;
@@ -278,6 +302,16 @@ function GameScreen({ s, game, onLeave }: { s: RoomScreen; game: GameView; onLea
   const elapsed = performance.now() - s.gameAt;
   const clockOf = (c: Color) => (game.clock ? (game.clock.running === c ? game.clock[c] - elapsed : game.clock[c]) : null);
   const canMove = !over && s.status === 'open' && s.reconnecting === null && game.pos.turn === me;
+
+  // Effects and sound (Stage 2).
+  const runningLeft = game.clock?.running ? clockOf(game.clock.running) : null;
+  const tension = !over && (inCheck(game.pos) || (runningLeft !== null && runningLeft < 30_000));
+  useEffect(() => setTension(tension), [tension]);
+  useClockTicks(clockOf(me), running && game.clock?.running === me);
+  const r = game.result;
+  const fallen = r && r.winner && (r.reason === 'checkmate' || r.reason === 'resign') ? { color: other(r.winner), slow: r.reason === 'resign' } : null;
+  const drained = !!r && r.winner === null && r.reason !== 'forfeit' && r.reason !== 'left';
+  const flagged = r && (r.reason === 'timeout' || r.reason === 'timeoutDraw') && game.clock ? (game.clock.w <= 0 ? 'w' : game.clock.b <= 0 ? 'b' : null) : null;
 
   const board = (
     <Board
@@ -289,15 +323,22 @@ function GameScreen({ s, game, onLeave }: { s: RoomScreen; game: GameView; onLea
       showLegal={settings.legalMoves}
       showLast={settings.lastMove}
       onMove={playerMove}
+      intro={game.pos.fullmove === 1 && game.pos.turn === 'w' && !over}
+      fallen={fallen}
+      drained={drained}
     />
   );
-  const opponentBar = <PlayerBar color={them} mine={false} clock={clockOf(them)} toMove={!over && game.pos.turn === them} note={opponentNote(s, game, them, elapsed)} />;
-  const myBar = <PlayerBar color={me} mine clock={clockOf(me)} toMove={!over && game.pos.turn === me} note={myNote(s, game, me)} />;
+  const opponentBar = (
+    <PlayerBar color={them} mine={false} clock={clockOf(them)} toMove={!over && game.pos.turn === them} note={opponentNote(s, game, them, elapsed)} cracked={flagged === them} />
+  );
+  const myBar = <PlayerBar color={me} mine clock={clockOf(me)} toMove={!over && game.pos.turn === me} note={myNote(s, game, me)} cracked={flagged === me} />;
   const lower = over ? <ResultPanel s={s} game={game} me={me} onLeave={onLeave} /> : <Actions s={s} game={game} me={me} onLeave={onLeave} />;
 
   return (
     <PlayLayout>
-      <div ref={box} className="flex h-full w-full items-center justify-center overflow-hidden p-3">
+      <EffectsLayer shakeRef={shakeRef} />
+      <div ref={box} className="relative z-10 flex h-full w-full items-center justify-center overflow-hidden p-3">
+        <div ref={shakeRef}>
         {size.w > 0 &&
           (landscape ? (
             <div className="flex items-stretch gap-6">
@@ -319,6 +360,7 @@ function GameScreen({ s, game, onLeave }: { s: RoomScreen; game: GameView; onLea
               <div className="min-h-[120px]">{lower}</div>
             </div>
           ))}
+        </div>
       </div>
     </PlayLayout>
   );
@@ -361,7 +403,7 @@ function myNote(s: RoomScreen, game: GameView, me: Color): ReactNode {
   return game.pos.turn === me ? <span className="text-accent">Your move</span> : null;
 }
 
-function PlayerBar({ color, mine, clock, toMove, note }: { color: Color; mine: boolean; clock: number | null; toMove: boolean; note: ReactNode }) {
+function PlayerBar({ color, mine, clock, toMove, note, cracked = false }: { color: Color; mine: boolean; clock: number | null; toMove: boolean; note: ReactNode; cracked?: boolean }) {
   const low = clock !== null && clock < 10_000;
   return (
     <div className={cx('flex items-center gap-3 rounded-xl border-2 bg-surface px-3 py-2', mine ? 'border-navy' : 'border-line')}>
@@ -376,11 +418,17 @@ function PlayerBar({ color, mine, clock, toMove, note }: { color: Color; mine: b
       {clock !== null && (
         <span
           className={cx(
-            'shrink-0 rounded-lg px-2.5 py-1.5 font-mono text-xl font-semibold tabular-nums',
-            toMove ? (low ? 'bg-accent text-on-accent' : 'bg-navy text-on-accent') : 'bg-raised text-ink',
+            'relative shrink-0 overflow-hidden rounded-lg px-2.5 py-1.5 font-mono text-xl font-semibold tabular-nums',
+            cracked ? 'animate-clock-crack bg-danger text-on-accent' : toMove ? (low ? 'animate-clock-low bg-accent text-on-accent' : 'bg-navy text-on-accent') : 'bg-raised text-ink',
           )}
         >
           {formatClock(clock)}
+          {/* Out of time: the clock face cracks. */}
+          {cracked && (
+            <svg viewBox="0 0 100 40" preserveAspectRatio="none" className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden>
+              <path d="M48 0 L44 12 L53 18 L46 29 L50 40 M44 12 L30 8 L18 14 M53 18 L68 15 L80 22 M46 29 L34 33 M53 18 L60 30" fill="none" stroke="#faeeda" strokeWidth="2.2" strokeLinejoin="round" />
+            </svg>
+          )}
         </span>
       )}
     </div>
