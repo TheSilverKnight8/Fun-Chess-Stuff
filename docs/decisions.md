@@ -26,12 +26,12 @@ Macro to micro, with a test checkpoint at the end of each stage. Each mode stage
 | Draw offers | An offer stays open until it is accepted or declined, or the player it was made to moves. No limit on how often. |
 | Last-move highlight | On by default. |
 | Stage plan | Approved as proposed. |
+| App name (the spec's title is a working title) | "Fun Chess Stuff" is fine for now. |
 
 ## Questions for Caleb (from Stage 1)
 
 | Question | What Stage 1 does until answered |
 | --- | --- |
-| **App name.** The spec calls its title a working title. | The repository's name, **Fun Chess Stuff**, everywhere (header, Home, the installed app). It is one line in `src/config.ts` plus the name in `vite.config.ts` and `index.html`. |
 | **Timeout against insufficient material: which test?** The answer was "a draw with insufficient material". Stage 1 asks whether the side *with time left* could checkmate with its own pieces: a lone king, a king and one knight, or a king and bishops all on one color of square cannot, so the game is a draw. FIDE's rule is stricter: it asks whether *any* series of legal moves could end in mate, counting the flagged player's pieces as possible blockers. So, for example, a king and knight against a king and queen is a draw here but a loss on time under FIDE (a mate with the queen blocking is possible in theory). | The own-pieces test above. |
 | **Leaving on purpose during a game.** The spec says the disconnected player forfeits, with a reconnect grace period. Leaving the room on purpose (the Leave button, after a confirm) is not a lost connection. | Leaving on purpose forfeits at once, without the grace period. Closing or reloading the tab counts as a lost connection (the grace period applies, but a reloaded page cannot rejoin, because nothing is saved). |
 
