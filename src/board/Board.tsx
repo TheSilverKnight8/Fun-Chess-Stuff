@@ -34,6 +34,10 @@ export interface BoardProps {
   onEvict?: ((sq: number) => void) | null;
   /** Rental: show each square's rent (base + rise) in its corner. */
   rentRise?: number | null;
+  /** Revival: squares to choose from (where a waiting piece goes, or which piece makes room). */
+  pick?: { squares: number[]; onPick: (sq: number) => void; remove: boolean } | null;
+  /** A wash over the whole board (Revival's auxiliary board). */
+  tint?: string | null;
 }
 
 const PROMO_ORDER: PromoKind[] = ['Q', 'R', 'B', 'N'];
@@ -52,7 +56,7 @@ interface Drag {
   wasSelected: boolean;
 }
 
-export function Board({ pos, orientation, canMove, lastMove, showLegal, showLast, onMove, intro = false, fallen = null, drained = false, holeHidden = false, showTurns = false, onEvict = null, rentRise = null }: BoardProps) {
+export function Board({ pos, orientation, canMove, lastMove, showLegal, showLast, onMove, intro = false, fallen = null, drained = false, holeHidden = false, showTurns = false, onEvict = null, rentRise = null, pick = null, tint = null }: BoardProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [selected, setSelected] = useState<number | null>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
@@ -106,6 +110,10 @@ export function Board({ pos, orientation, canMove, lastMove, showLegal, showLast
   const onPointerDown = (e: ReactPointerEvent) => {
     if (promo || e.button > 0) return;
     const s = squareAt(e.clientX, e.clientY);
+    if (s !== null && pick) {
+      if (pick.squares.includes(s)) pick.onPick(s);
+      return;
+    }
     if (s === null || !canMove) return;
     if (onEvict) {
       const p = pos.board[s];
@@ -183,7 +191,11 @@ export function Board({ pos, orientation, canMove, lastMove, showLegal, showLast
             className="absolute"
             style={{ left: `${col * 12.5}%`, top: `${row * 12.5}%`, width: '12.5%', height: '12.5%', background: light ? 'var(--sq-light)' : 'var(--sq-dark)' }}
           >
+            {tint && <div className="absolute inset-0" style={{ background: tint }} />}
             {isLast && <div className="absolute inset-0 bg-[var(--sq-last)]" />}
+            {pick?.squares.includes(s) && (
+              <div className={cx('absolute inset-[5%] z-[3] animate-check-pulse rounded-md border-[3px] border-dashed', pick.remove ? 'border-accent bg-accent/25' : 'border-navy bg-navy/15')} />
+            )}
             {rentRise !== null && (
               <span className={cx('absolute right-[6%] top-[4%] font-mono text-[clamp(7px,1.5cqw,11px)] leading-none', light ? 'text-[var(--sq-dark-ink)]' : 'text-[var(--sq-light)]')}>{squareRent(s) + rentRise}</span>
             )}

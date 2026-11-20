@@ -3,7 +3,7 @@
 // it here; the effects layer listens and draws. Display only: nothing here
 // touches the game, the clocks or what is sent between players.
 
-import type { Color, MoveInfo, Position } from '../chess/types';
+import type { Color, MoveInfo, Piece, Position } from '../chess/types';
 import type { Result } from '../game/match';
 import type { Roll } from '../chess/pothole';
 import type { RemorseEvent } from '../chess/remorse';
@@ -29,6 +29,10 @@ export type FxEvent =
   | { t: 'remorse'; ev: RemorseEvent }
   /** Bario: a side's cycle ended; these squares' Quantums turned undefined again. */
   | { t: 'cycle'; squares: number[] }
+  /** Revival: a piece leaving a board, arriving on one, or gone for good. */
+  | { t: 'leave'; piece: Piece; sq: number; board: 'main' | 'aux' }
+  | { t: 'enter'; piece: Piece; sq: number; board: 'main' | 'aux' }
+  | { t: 'gone'; piece: Piece; sq: number; board: 'main' | 'aux' }
   /** Rental: money moved. `me` tells which side of the board is whose. */
   | { t: 'rental'; ev: RentalEvent; me: Color; squares: number[]; payer: Color | null }
   | { t: 'roll'; roll: Roll }

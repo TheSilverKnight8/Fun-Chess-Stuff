@@ -2,6 +2,7 @@
 // This is Standard Chess as the spec describes it (section 7.1); the variants
 // in later stages build on it.
 
+import { playRevival, revivalMoves } from './revival';
 import {
   PROMO_KINDS,
   fileOf,
@@ -216,7 +217,7 @@ export function blockedOf(pos: Position): Block {
 export const givesCheck = (p: Piece) => p.status !== 'devastated' && p.status !== 'guilt';
 
 /** Do kings count as royal (check, checkmate)? Not in Bastille Chess. */
-export const royal = (pos: Position) => pos.variant !== 'bastille';
+export const royal = (pos: Position) => pos.variant !== 'bastille' && pos.variant !== 'revivalAux';
 
 export function inCheck(pos: Position, color: Color = pos.turn): boolean {
   if (!royal(pos)) return false;
@@ -422,6 +423,8 @@ export function legalMoves(pos: Position): MoveInfo[] {
   const mover = pos.turn;
   // Rental: while rent is owed the player gives up units instead of moving.
   if (pos.rental && pos.rental.owed !== null) return [];
+  // Revival: the moves on both boards (revival.ts).
+  if (pos.variant === 'revival') return revivalMoves(pos);
   // Mega Knight: after rolling a 6, the turn's move is a mega knight move.
   if (pos.mkRoll) return megaMoves(pos).filter((m) => !inCheck(play(pos, m), mover));
   // Bastille: no royal pieces, so no check: every move that follows the pieces' rules is legal.
@@ -432,6 +435,7 @@ export function legalMoves(pos: Position): MoveInfo[] {
 /** Makes a move that is already known to be legal. Returns a new position. */
 export function play(pos: Position, m: MoveInfo): Position {
   if (m.mk) return playMega(pos, m);
+  if (pos.variant === 'revival') return playRevival(pos, m).pos;
   const board = pos.board.slice();
   const c = pos.turn;
   const castling = { w: { ...pos.castling.w }, b: { ...pos.castling.b } };
@@ -441,7 +445,8 @@ export function play(pos: Position, m: MoveInfo): Position {
   let moving = board[m.from]!;
   board[m.from] = null;
   // Remorse: a promoted pawn keeps its status (Claude Code's reading). Bario: a promoted piece is a fixed piece, not a Quantum.
-  if (m.promo) moving = { ...moving, id: nextId++, kind: m.promo };
+  // Revival: it is marked as promoted (it respawns on the second rank).
+  if (m.promo) moving = { ...moving, id: nextId++, kind: m.promo, ...(pos.variant === 'revivalAux' || pos.variant === 'standard' ? { promoted: true } : {}) };
   // Bario: an undefined Quantum becomes the type it moved as (a castling Quantum: the rook, below).
   if (m.define && !m.castle) moving = { ...moving, kind: m.define };
   board[m.to] = moving;
@@ -565,7 +570,9 @@ export function formMegaKnights(pos: Position): { pos: Position; formed: number[
 
 /** Finds the legal move matching what a player asked for, or null if it is not legal. */
 export function findLegal(pos: Position, move: Move): MoveInfo | null {
-  return legalMoves(pos).find((m) => m.from === move.from && m.to === move.to && (m.promo ?? null) === (move.promo ?? null) && (m.define ?? null) === (move.define ?? null)) ?? null;
+  return (
+    legalMoves(pos).find((m) => m.from === move.from && m.to === move.to && (m.promo ?? null) === (move.promo ?? null) && (m.define ?? null) === (move.define ?? null) && (m.board ?? 'main') === (move.board ?? 'main')) ?? null
+  );
 }
 
 // ---------------------------------------------------------------- FEN (for tests and debugging)

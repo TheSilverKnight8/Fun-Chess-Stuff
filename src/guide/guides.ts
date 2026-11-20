@@ -371,5 +371,43 @@ export const GUIDES: Partial<Record<ModeId, GuideSection[]>> = {
     CLOCKS,
     ...PIECES,
   ],
+
+  revival: [
+    {
+      title: 'Two boards',
+      text: [
+        'Orthodox chess on the main board, plus an auxiliary board that starts empty. Only one board shows at a time: the button under the board flips to the other.',
+        'Each turn you make one move on the main board and one on the auxiliary board, in either order. A board where you have no legal move is skipped.',
+      ],
+    },
+    {
+      title: 'Captured on the main board',
+      text: ['A piece captured on the main board is not gone: it goes to the auxiliary board and appears on its own starting square there. Its owner chooses which square when there is more than one (rooks, knights: either; bishops: the one of their colour; pawns: any square of the second rank).'],
+      scene: { setup: ['wKe1', 'bKe8', 'wRe4', 'bNe6'], ranks: [3, 8], steps: [{ t: 'move', from: 'e4', to: 'e6' }, { t: 'caption', text: 'The black knight leaves the main board for the auxiliary board.' }] },
+    },
+    {
+      title: 'Fighting your way back',
+      text: [
+        'A piece that captures on the auxiliary board goes back to the main board, onto its starting square. The piece it captured is gone for good.',
+        'A pawn that promotes on the auxiliary board keeps its promotion, and comes back on the second rank like a pawn. A promoted piece captured on the main board arrives on the auxiliary board on the second rank too.',
+      ],
+      scene: { setup: ['wNc3', 'bPd5'], steps: [{ t: 'caption', text: 'On the auxiliary board:' }, { t: 'move', from: 'c3', to: 'd5' }, { t: 'remove', sq: 'd5' }, { t: 'caption', text: 'The pawn is gone for good; the knight returns to b1 or g1 on the main board.' }, { t: 'wait', ms: 800 }] },
+    },
+    {
+      title: 'No room',
+      text: [
+        'If none of a piece’s starting squares is free, its owner chooses a piece standing on one of them to remove (never a king). The removed piece counts as captured, even if it is your own: from the main board it goes to the auxiliary board, from the auxiliary board it is gone.',
+      ],
+    },
+    {
+      title: 'Check and the end',
+      text: [
+        'Check exists on the main board only, and the game ends by checkmate there. If you begin your turn in check, your main-board move must get you out.',
+        'Stalemate: no legal move on either board and not in check. Threefold repetition counts both boards; the fifty-move rule is reset by a capture or pawn move on either board. No insufficient-material draws (captured pieces can come back).',
+      ],
+    },
+    CLOCKS,
+    ...PIECES,
+  ],
 };
 

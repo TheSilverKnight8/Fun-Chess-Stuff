@@ -279,6 +279,21 @@ export const sfx = {
   owed() {
     notes([67, 63], { type: 'square', step: 0.15, dur: 0.22, gain: 0.09 });
   },
+  /** Revival: the view flips to the other board. */
+  flip() {
+    noise({ filter: 'bandpass', hz: 600, toHz: 3000, q: 0.7, dur: 0.35, gain: 0.25 });
+    tone(220, { type: 'sine', to: 440, dur: 0.3, gain: 0.08 });
+  },
+  /** Revival: a piece leaves its board, rising away. */
+  leave() {
+    tone(500, { type: 'triangle', to: 1500, dur: 0.5, gain: 0.1 });
+    noise({ filter: 'highpass', hz: 4000, toHz: 8000, dur: 0.5, gain: 0.08 });
+  },
+  /** Revival: a piece arrives in a beam of light. */
+  enter() {
+    notes([84, 79, 72], { type: 'triangle', step: 0.07, dur: 0.3, gain: 0.1 });
+    tone(110, { at: 0.2, type: 'sine', to: 70, dur: 0.3, gain: 0.25 });
+  },
   /** Manual: a page turning (a paper swish). */
   pageTurn() {
     noise({ filter: 'bandpass', hz: 1800, toHz: 4500, q: 0.8, dur: 0.28, gain: 0.22 });

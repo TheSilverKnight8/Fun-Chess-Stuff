@@ -9,6 +9,7 @@ import { potholeStep } from '../src/chess/pothole.ts';
 import { rollMega } from '../src/chess/megaknight.ts';
 import { remorseStep, skipExtra } from '../src/chess/remorse.ts';
 import { formMegaKnights, findLegal, quantumAvail } from '../src/chess/standard.ts';
+import { choose, playRevival, revivalStart, startSquares } from '../src/chess/revival.ts';
 import { evict, rentFor, rentalAfterMove, rentalStart, squareRent } from '../src/chess/rental.ts';
 import { parseSquare, type Position, type Variant } from '../src/chess/types.ts';
 
@@ -427,6 +428,58 @@ console.log('\nRental');
   check(be?.reason === 'bankrupt' && 'winner' in be && be.winner === 'b', 'owing rent with only the king left is bankruptcy');
   g = newBoardGame({ ...st, board: st.board.map((p) => (p?.kind === 'K' ? p : null)), rental: { treasury: { w: 5, b: 5 }, owed: null } });
   check(g.end?.reason === 'treasuryTie', 'kings only with equal treasuries: a draw');
+}
+
+// ---------------------------------------------------------------- Revival
+
+console.log('\nRevival');
+{
+  const rv = (fen: string, aux: Record<string, string> = {}): Position => {
+    const pos = revivalStart(fromFen(fen));
+    const a = pos.revival!.aux.slice();
+    for (const [sqn, code] of Object.entries(aux)) a[P(sqn)] = { id: 500 + P(sqn), color: code[0] as 'w' | 'b', kind: code[1] as 'P', ...(code[2] === '+' ? { promoted: true } : {}) };
+    return { ...pos, revival: { ...pos.revival!, aux: a } };
+  };
+  const mvR = (pos: Position, from: string, to: string, board: 'main' | 'aux' = 'main') => {
+    const m = findLegal(pos, { from: P(from), to: P(to), board });
+    if (!m) throw new Error(`Illegal ${board} ${from}-${to}`);
+    return playRevival(pos, m);
+  };
+  let p = revivalStart(startPosition());
+  check(legalMoves(p).length === 20, 'start: 20 main-board moves, nothing on the auxiliary board');
+  let r = mvR(p, 'e2', 'e4');
+  check(r.pos.turn === 'b', 'with nothing on the auxiliary board, its move is skipped and the turn passes');
+  // A main-board capture sends the piece to the auxiliary board; its owner chooses among free squares.
+  p = rv('4k3/8/8/3p4/4P3/8/8/4K3 w - - 0 1');
+  r = mvR(p, 'e4', 'd5');
+  check(r.pos.revival!.queue.length === 1 && r.pos.revival!.queue[0].owner === 'b' && r.pos.revival!.queue[0].options.length === 8, 'a captured black pawn waits for Black to choose a square on its second rank (aux board)');
+  const placed = choose(r.pos, P('d7'))!;
+  check(placed.pos.revival!.aux[P('d7')]?.kind === 'P' && placed.pos.turn === 'b', 'placed on d7 of the auxiliary board; then it is Black’s turn');
+  // One free starting square: placed at once.
+  p = rv('4k3/8/8/8/8/8/8/R3K3 w - - 0 1');
+  p = { ...p, board: (() => { const b = p.board.slice(); b[P('a8')] = { id: 77, color: 'b', kind: 'Q' }; return b; })() };
+  r = mvR(p, 'a1', 'a8');
+  check(r.pos.revival!.aux[P('d8')]?.kind === 'Q' && r.pos.revival!.queue.length === 0, 'a captured queen spawns on d8 of the auxiliary board at once (one starting square)');
+  // A capture on the auxiliary board: the victim is gone, the capturer respawns on the main board.
+  p = rv('4k3/8/8/8/8/8/8/R3K3 w - - 0 1', { e4: 'wN', d6: 'bP' });
+  p = { ...p, revival: { ...p.revival!, mainDone: true } };
+  r = mvR(p, 'e4', 'd6', 'aux');
+  check(r.pos.revival!.aux[P('d6')] === null && r.transfers.some((t) => t.gone) && r.pos.revival!.queue.length === 1 && r.pos.revival!.queue[0].options.join() === [P('b1'), P('g1')].join(), 'aux capture: the victim is gone; the knight waits for White to choose b1 or g1 on the main board');
+  const back = choose(r.pos, P('g1'));
+  check(!!back && back.pos.board[P('g1')]?.kind === 'N', 'White puts the knight back on g1 of the main board');
+  // Blocked respawn: a piece on a starting square is removed to make room (and, from the main board, goes to the auxiliary board).
+  p = rv('4k3/8/8/8/8/8/8/1n2K1n1 w - - 0 1', { e4: 'wN', d6: 'bP' });
+  p = { ...p, revival: { ...p.revival!, mainDone: true } };
+  r = mvR(p, 'e4', 'd6', 'aux');
+  const q = r.pos.revival!.queue[0];
+  check(q?.mode === 'displace' && q.options.length === 2 && q.owner === 'w', 'both knight squares taken: White chooses which piece to remove');
+  const d = choose(r.pos, P('b1'))!;
+  check(d.pos.board[P('b1')]?.color === 'w' && d.pos.revival!.queue.length === 1 && d.pos.revival!.queue[0].owner === 'b', 'the removed black knight counts as captured: it goes to the auxiliary board, Black chooses');
+  check(startSquares({ id: 1, color: 'w', kind: 'B' }, true).length === 1 && startSquares({ id: 1, color: 'w', kind: 'Q', promoted: true }, false).length === 8, 'bishops keep their colour; promoted pieces respawn on the second rank');
+  // Check is on the main board only; checkmate ends it.
+  p = rv('6k1/5ppp/8/8/8/8/8/R5K1 w - - 0 1');
+  r = mvR(p, 'a1', 'a8');
+  check(newBoardGame(r.pos).end?.reason === 'checkmate', 'checkmate on the main board ends the game');
 }
 
 console.log(failed ? '\nSome checks FAILED' : '\nAll checks passed');

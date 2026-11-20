@@ -10,8 +10,8 @@ Macro to micro, with a test checkpoint at the end of each stage. Each mode stage
 2. **Audio and Standard's effects:** the sound engine, music, and the capture, check and checkmate effects. The effects plan is shown to Caleb before it is built. This sets up how every later mode plugs in its own effects. **(done)**
 3. **Bastille and Pot-Hole.** **(done)**
 4. **Remorse and Mega Knight**, plus the guidebook (Caleb's request). **(done)**
-5. **Bario and Rental.** **(this stage)**
-6. **Revival.**
+5. **Bario and Rental.** **(done)**
+6. **Revival.** **(this stage)**
 7. **Tuning** from Caleb's playtests.
 
 ## Caleb's answers
@@ -36,6 +36,9 @@ Macro to micro, with a test checkpoint at the end of each stage. Each mode stage
 | Stage 3 rule questions, effects and music | "Compose everything. For all the other stuff you can decide what to do": the Bastille and Pot-Hole tracks are Claude Code's, and the six rule readings below are Claude Code's calls (revisable). |
 | Stage 4 rule questions, effects and music | "Build stage 4 first with your picks": Claude Code's readings below, its effects proposal and its music. |
 | Stage 5 rule questions, effects and music | "Build stage 4 first with your picks, then stage 5": Claude Code's picks below, its effects and its music. |
+| Revival's view (Stage 6) | Only the main board is visible; a button switches to the auxiliary board with an effect. Units moving between boards show an effect leaving, then the view switches to the other board by itself, then an effect entering. |
+| Revival's rules (Stage 6) | Claude Code's picks 1–9 below; Caleb answered with the view design and did not change them. |
+| Mega Knight: four failed rolls repeat the position (asked after Stage 5) | No answer yet; unchanged (a draw by threefold repetition can come from rolls alone). |
 
 ## Questions for Caleb (from Stage 1)
 
@@ -288,6 +291,36 @@ Manuals for both modes, with scenes, are in the guidebook.
 - `npm run check:rules` adds 11 Bario checks (moving as a type, caps, promotions raising caps, cycle reset, the check rule and used-up types, castling with a Quantum, insufficient material) and 9 Rental checks (square rents, the first income, rent rises, paying, owing and giving up units, kings-only treasuries, bankruptcy, equal treasuries).
 - Two-browser run: Bario Quantums moving as a knight (chosen at once) and as a bishop (chosen from the menu), the same on both screens; Rental treasuries 48/0 at the start and 24/48 after e4, the same on both screens. Found and fixed: the guest's Quantum moves were sent without the chosen type. No errors.
 - Not tested in the browser: giving up units (tested in the rule checks), and the new music by ear.
+
+
+## Revival (Stage 6)
+
+### Claude Code's picks (revisable)
+
+| # | Question | Choice |
+| --- | --- | --- |
+| 1 | Starting state | The auxiliary board starts empty, without kings, so there is no check there. A player with nothing they can move there skips it. |
+| 2 | Who places a piece with several possible squares | Its owner, at once, with their own clock running (the other player's clock waits). The same for choosing which piece makes room when every starting square is taken. Only one square: placed automatically. |
+| 3 | The two moves | Either order; the turn (and the increment) ends after both are made or skipped. |
+| 4 | Check | Main board only. A player who begins the turn in check must get out with the main-board move. Making room on the main board may not leave your own king in check, when there is another choice. |
+| 5 | Checkmate | In check with no legal main-board move, even with moves left on the auxiliary board. |
+| 6 | Stalemate | No legal move on either board, not in check. |
+| 7 | Starting squares | The owner's own: queen d, rooks a/h, knights b/g, bishops c/f (the one of their own square colour), pawns and promoted pieces any square of the second rank. |
+| 8 | Chain reactions | A piece removed from the main board to make room goes to the auxiliary board and is placed the same way. |
+| 9 | The auxiliary board | Pawns, en passant and promotion as usual; no castling (no kings). |
+
+### How it is shown
+
+- One board at a time (Caleb's design). Under the board, a bar with **Auxiliary board (n)** / **Main board** to flip the view (a quick tilt-and-flash flip with a whoosh), and what is left of the turn: "Main move: to do · Aux move: done".
+- The auxiliary board has a navy wash over its squares, so it never looks like the main board.
+- When a piece has to be placed, its owner's view switches to that board and the possible squares get dashed boxes (red when choosing a piece to remove); the other player sees "Your opponent is placing a piece…".
+- Pieces changing boards, one after another: the view shows the board it leaves; it rises out in a column of light (red leaving the main board, gold leaving the auxiliary board); the view flips to the other board; it lands in a beam with a ring and a small shake. A piece captured on the auxiliary board crumbles to grey dust with "GONE".
+- Music: **Second Life**, B minor turning to D major and back, 88 beats a minute, a hymn-like triangle lead over a slow rising bass. Its manual is in the guidebook.
+
+## Testing (Stage 6)
+
+- `npm run check:rules` adds 12 Revival checks: skipping an empty board, a main-board capture waiting for its owner's choice and being placed, one starting square placing at once, an auxiliary capture (victim gone, capturer waiting to choose b1 or g1, then returning), making room (owner chooses, the removed piece going to the auxiliary board for its owner to place), bishops' colours and promoted pieces' squares, and checkmate.
+- Two-browser run: exd5 sending a pawn to the auxiliary board with Black's view switching and Black choosing e7; Qxd5 the same for White; both players playing both boards; exd4 on the auxiliary board removing the white pawn for good and returning the black pawn to d7. Both screens agreed on both boards; no errors. Frames checked by eye.
 
 ## Testing (Stage 3)
 

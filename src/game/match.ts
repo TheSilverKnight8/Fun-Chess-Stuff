@@ -7,6 +7,8 @@ import { formMegaKnights } from '../chess/standard';
 import { rollMega } from '../chess/megaknight';
 import { remorseStep, skipExtra, type RemorseEvent } from '../chess/remorse';
 import { evict, rentalAfterMove, rentalStart, type RentalEvent } from '../chess/rental';
+import { choose, playRevival, revivalStart, type Transfer } from '../chess/revival';
+import { findLegal } from '../chess/standard';
 import { startPosition } from '../chess/standard';
 import { potholeStep, type PotholeDuration, type Rand, type Roll } from '../chess/pothole';
 import { other, sq, type Color, type Move, type MoveInfo, type Position } from '../chess/types';
@@ -63,7 +65,7 @@ export interface ModeOptions {
 
 export const DEFAULT_OPTIONS: ModeOptions = { potholeDuration: 'base' };
 
-const VARIANT: Partial<Record<ModeId, Variant>> = { bastille: 'bastille', pothole: 'pothole', megaknight: 'megaknight', remorse: 'remorse', bario: 'bario', rental: 'rental' };
+const VARIANT: Partial<Record<ModeId, Variant>> = { revival: 'standard', bastille: 'bastille', pothole: 'pothole', megaknight: 'megaknight', remorse: 'remorse', bario: 'bario', rental: 'rental' };
 
 export interface MatchState {
   /** Counts the games in this room, so a view can tell a new game from the last one. */
@@ -88,6 +90,8 @@ export interface MatchState {
   formed: number[];
   /** Rental: what the last action did to the money. */
   rental: RentalEvent | null;
+  /** Revival: pieces that changed boards with the last action. */
+  transfers: Transfer[];
 }
 
 /** What both screens show. Clock times are as of the moment the view was made. */
@@ -107,6 +111,7 @@ export interface GameView {
   mkRoll: { ply: number; d6: number } | null;
   formed: number[];
   rental: RentalEvent | null;
+  transfers: Transfer[];
   /** A player who lost connection, and how long they have to come back. */
   away: { color: Color; msLeft: number } | null;
 }
@@ -129,6 +134,7 @@ export function newMatch(number: number, mode: ModeId, time: TimeControl, hostCo
     mkRoll: null,
     formed: [],
     rental: null,
+    transfers: [],
   };
 }
 
@@ -142,6 +148,7 @@ function startFor(mode: ModeId): Position {
     return { ...pos, board, bario: { promos: { w: 0, b: 0 }, cycles: { w: 0, b: 0 } } };
   }
   if (mode === 'rental') return rentalStart(pos);
+  if (mode === 'revival') return revivalStart(pos);
   return pos;
 }
 
@@ -173,14 +180,36 @@ function timeoutResult(m: MatchState, flagged: Color): Result {
   return sideCannotMate(m.game.pos, opp) ? { winner: null, reason: 'timeoutDraw' } : { winner: opp, reason: 'timeout' };
 }
 
-/**
- * A player's move. `reported` is the guest's own measure of how long they
- * thought (null for the host, whose time the host's device measures itself).
- * Returns null if the move is not allowed.
- */
-/** Runs one action of the player to move with the clock: their time is charged; the increment is added only when the turn passes to the other player. */
+/** Who acts now: the side to move, or (Revival) the owner of a piece waiting to be placed. */
+export const actorOf = (pos: Position): Color => pos.revival?.queue[0]?.owner ?? pos.turn;
+
+/** Revival: a move on either board, or placing a waiting piece (`placeSq`). */
+function revivalAct(g: BoardGame, move: Move | null, placeSq: number | null): { game: BoardGame; patch: Partial<MatchState> } | null {
+  let r: { pos: Position; transfers: Transfer[] } | null;
+  let lastMove = g.lastMove;
+  if (move) {
+    const mi = findLegal(g.pos, move);
+    if (!mi) return null;
+    r = playRevival(g.pos, mi);
+    lastMove = mi;
+  } else r = choose(g.pos, placeSq!);
+  if (!r) return null;
+  const key = repetitionKey(r.pos);
+  const game: BoardGame = { pos: r.pos, seen: { ...g.seen, [key]: (g.seen[key] ?? 0) + 1 }, lastMove, end: null };
+  game.end = boardEnd(game);
+  return { game, patch: { transfers: r.transfers } };
+}
+
+/** Revival: the owner of a waiting piece chooses its square (or what to remove). */
+export function placeIn(m: MatchState, color: Color, sqr: number, reported: number | null, now: number): MatchState | null {
+  if (m.game.pos.variant !== 'revival') return null;
+  return takeTurn(m, color, reported, now, (g) => revivalAct(g, null, sqr));
+}
+
+/** Runs one action of the player who acts now (the side to move, or Revival's chooser) with the clock: their time is charged; the increment is added when a turn passes. */
 function takeTurn(m: MatchState, color: Color, reported: number | null, now: number, act: (g: BoardGame) => { game: BoardGame; patch?: Partial<MatchState> } | null): MatchState | null {
-  if (m.result || m.game.pos.turn !== color) return null;
+  if (m.result || actorOf(m.game.pos) !== color) return null;
+  const turnBefore = m.game.pos.turn;
   const clock = m.clock ? { ...m.clock } : null;
   let used = 0;
   if (clock && m.time) {
@@ -191,15 +220,17 @@ function takeTurn(m: MatchState, color: Color, reported: number | null, now: num
   const done = act(m.game);
   if (!done) return null;
   const { game } = done;
-  const passed = game.pos.turn !== color;
+  const passed = game.pos.turn !== turnBefore;
   if (clock && m.time) {
-    clock[color] = clock[color] - used + (passed ? m.time.increment * 1000 : 0);
-    clock.running = passed ? other(color) : color;
+    // The actor's time is charged; the increment goes to the player whose turn just ended.
+    clock[color] = clock[color] - used;
+    if (passed) clock[turnBefore] += m.time.increment * 1000;
+    clock.running = actorOf(game.pos);
     clock.stamp = now;
   }
   // A draw offer stays open until the player it was made to moves (or answers it).
   const drawOffer = m.drawOffer && m.drawOffer !== color ? null : m.drawOffer;
-  const next: MatchState = { ...m, game, clock, drawOffer, roll: null, remorse: null, mkRoll: null, formed: [], rental: null, ...done.patch };
+  const next: MatchState = { ...m, game, clock, drawOffer, roll: null, remorse: null, mkRoll: null, formed: [], rental: null, transfers: [], ...done.patch };
   if (game.end) {
     const e = game.end;
     return end(next, 'winner' in e ? { winner: e.winner, reason: e.reason } : { winner: null, reason: e.reason }, now);
@@ -215,6 +246,7 @@ function takeTurn(m: MatchState, color: Color, reported: number | null, now: num
 export function moveIn(m: MatchState, color: Color, move: Move, reported: number | null, now: number, rand?: Rand): MatchState | null {
   return takeTurn(m, color, reported, now, (g) => {
     const variant = g.pos.variant;
+    if (variant === 'revival') return revivalAct(g, move, null);
     const ply = plyOf(g.pos) + 1;
     let roll: Roll | null = null;
     let remorse: RemorseEvent | null = null;
@@ -337,6 +369,7 @@ export function viewOf(m: MatchState, now: number, away: GameView['away']): Game
     mkRoll: m.mkRoll,
     formed: m.formed,
     rental: m.rental,
+    transfers: m.transfers,
     away,
   };
 }

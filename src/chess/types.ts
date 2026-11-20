@@ -24,6 +24,8 @@ export interface Piece {
   kills?: number;
   /** Remorse: a devastated piece's owner-turns left before it self-captures. */
   due?: number;
+  /** Revival: a piece that was promoted (it respawns on the second rank, like a pawn). */
+  promoted?: boolean;
   /** Bario: a Quantum piece (undefined while its kind is X; defined as Q, R, B or N until its cycle ends). */
   quantum?: boolean;
 }
@@ -36,7 +38,8 @@ export interface Castling {
 }
 
 /** Which rules the position is played under (the board-level modes). */
-export type Variant = 'standard' | 'bastille' | 'pothole' | 'megaknight' | 'remorse' | 'bario' | 'rental';
+/** revivalAux: Revival's auxiliary board, played without kings or check. */
+export type Variant = 'standard' | 'bastille' | 'pothole' | 'megaknight' | 'remorse' | 'bario' | 'rental' | 'revival' | 'revivalAux';
 
 /** An open pothole (Pot-Hole Chess): its square, and how many more moves it stays open. */
 export interface Hole {
@@ -70,6 +73,31 @@ export interface Position {
   bario?: { promos: Record<Color, number>; cycles: Record<Color, number> };
   /** Rental: each side's treasury, and rent owed by the side to move while they choose units to give up. */
   rental?: { treasury: Record<Color, number>; owed: number | null };
+  /** Revival: the auxiliary board and where the turn stands (this Position's own board is the main board). */
+  revival?: RevivalState;
+}
+
+/** A piece waiting to be placed on a board (Revival), and who chooses where. */
+export interface Arrival {
+  piece: Piece;
+  board: 'main' | 'aux';
+  owner: Color;
+  /** place: choose an empty starting square; displace: none is empty, choose a piece on one to remove. */
+  mode: 'place' | 'displace';
+  options: number[];
+  /** Where the piece came from (for the effects). */
+  from: { board: 'main' | 'aux'; sq: number };
+}
+
+export interface RevivalState {
+  aux: (Piece | null)[];
+  auxEp: number | null;
+  mainDone: boolean;
+  auxDone: boolean;
+  /** Pieces waiting to be placed; the first is being placed now. */
+  queue: Arrival[];
+  /** This turn had a capture or pawn move on either board (the fifty-move rule). */
+  reset: boolean;
 }
 
 /** A move as a player gives it. */
@@ -81,6 +109,8 @@ export interface Move {
   mk?: boolean;
   /** Bario: the type an undefined Quantum becomes with this move. */
   define?: PromoKind;
+  /** Revival: which board the move is on (main if missing). */
+  board?: 'main' | 'aux';
 }
 
 /** A legal move with everything the board needs to show it. */

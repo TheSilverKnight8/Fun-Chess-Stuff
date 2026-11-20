@@ -74,7 +74,8 @@ export function useGameFx(game: GameView, me: Color, reconnecting: boolean) {
       const m = game.lastMove;
       const mate = game.result?.reason === 'checkmate';
       const checking = inCheck(game.pos) ? checkers(game.pos) : [];
-      emitFx({ t: 'move', m, pos: game.pos, checkers: checking, king: findKing(game.pos, game.pos.turn), mate, extraMove: !!prev.extra });
+      // Revival shows its own effects (pieces changing boards), on whichever board is visible.
+      if (!game.pos.revival) emitFx({ t: 'move', m, pos: game.pos, checkers: checking, king: findKing(game.pos, game.pos.turn), mate, extraMove: !!prev.extra });
       if (m.mk) {
         later(MK_LAND - 40, () => sfx.mkLand());
         if (m.crushed?.length) later(MK_LAND, () => sfx.capture(9));

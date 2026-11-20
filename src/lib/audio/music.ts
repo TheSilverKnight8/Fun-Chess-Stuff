@@ -7,7 +7,7 @@ import { getAudio, whenAudioStarts } from './engine';
 // A game track can have a tension layer that fades in while a king is in check
 // or a clock is low (setTension).
 
-export type TrackId = 'menu' | 'standard' | 'bastille' | 'pothole' | 'megaknight' | 'remorse' | 'bario' | 'rental';
+export type TrackId = 'menu' | 'standard' | 'bastille' | 'pothole' | 'megaknight' | 'remorse' | 'bario' | 'rental' | 'revival';
 
 interface Track {
   bpm: number;
@@ -272,7 +272,39 @@ const rental: Track = {
   },
 };
 
-const TRACKS: Record<TrackId, Track> = { menu, standard, bastille, pothole, megaknight, remorse, bario, rental };
+// "Second Life" (Revival Chess): two worlds, B minor turning to D major and back
+// (Bm, G, D, A, Bm, G, Em, F#), a hymn-like triangle lead over a slow rising
+// bass, with a ghostly answer an octave up. Tension: pulsing kicks and a sawtooth arpeggio.
+const bmin = [59, 62, 66];
+const gMj = [59, 62, 67];
+const dMj = [57, 62, 66];
+const aMj = [57, 61, 64];
+const emn = [59, 64, 67];
+const fsM = [58, 61, 66];
+const revival: Track = {
+  bpm: 88,
+  leadType: 'triangle',
+  lead: [
+    ...bar(78, 0, 0, 76, 74, 0, 0, 0),
+    ...bar(74, 0, 71, 0, 79, 0, 0, 0),
+    ...bar(78, 0, 81, 0, 78, 0, 74, 0),
+    ...bar(76, 0, 0, 0, 73, 0, 0, 0),
+    ...bar(86, 0, 0, 83, 78, 0, 0, 0),
+    ...bar(79, 0, 83, 0, 86, 0, 83, 0),
+    ...bar(83, 0, 0, 79, 76, 0, 71, 0),
+    ...bar(78, 0, 0, 0, 70, 0, 73, 0),
+  ],
+  bass: [35, 43, 38, 45, 35, 43, 40, 42].flatMap((r) => bar(r, 0, 0, r + 7, r + 12, 0, 0, 0)),
+  chords: [bmin, gMj, dMj, aMj, bmin, gMj, emn, fsM].flatMap((ch) => [ch, null, null, null, null, null, ch, null]),
+  drums: rep(['k...s...'], 8).join(''),
+  tension: {
+    drums: rep(['k.k.k.kh'], 8).join(''),
+    arp: [bmin, gMj, dMj, aMj, bmin, gMj, emn, fsM].flatMap((ch) => [ch[0] + 12, ch[1] + 12, ch[2] + 12, ch[1] + 24, ch[2] + 12, ch[1] + 12, ch[0] + 12, ch[2]]),
+    arpType: 'sawtooth',
+  },
+};
+
+const TRACKS: Record<TrackId, Track> = { menu, standard, bastille, pothole, megaknight, remorse, bario, rental, revival };
 
 const midiHz = (m: number) => 440 * 2 ** ((m - 69) / 12);
 const LOOKAHEAD = 0.2;

@@ -22,6 +22,8 @@ import {
   plyOf,
   resign,
   evictIn,
+  placeIn,
+  actorOf,
   rollIn,
   skipIn,
   viewOf,
@@ -297,6 +299,7 @@ function fromGuest(msg: RoomMessage) {
   } else if (msg.t === 'resign') next = resign(match, guest, t);
   else if (msg.t === 'roll') next = rollIn(match, guest, typeof msg.used === 'number' ? msg.used : Infinity, t, dice);
   else if (msg.t === 'skip') next = skipIn(match, guest, typeof msg.used === 'number' ? msg.used : Infinity, t);
+  else if (msg.t === 'place' && Number.isInteger(msg.sq)) next = placeIn(match, guest, msg.sq as number, typeof msg.used === 'number' ? msg.used : Infinity, t);
   else if (msg.t === 'evict' && Number.isInteger(msg.sq)) next = evictIn(match, guest, msg.sq as number, typeof msg.used === 'number' ? msg.used : Infinity, t);
   else if (msg.t === 'draw') {
     if (msg.a === 'offer') next = offerDraw(match, guest);
@@ -309,7 +312,7 @@ function fromGuest(msg: RoomMessage) {
 
 function isMove(m: unknown): m is Move {
   const v = m as Move;
-  return !!v && Number.isInteger(v.from) && Number.isInteger(v.to) && v.from >= 0 && v.from < 64 && v.to >= 0 && v.to < 64 && (v.promo === undefined || ['Q', 'R', 'B', 'N'].includes(v.promo)) && (v.mk === undefined || typeof v.mk === 'boolean') && (v.define === undefined || ['Q', 'R', 'B', 'N'].includes(v.define));
+  return !!v && Number.isInteger(v.from) && Number.isInteger(v.to) && v.from >= 0 && v.from < 64 && v.to >= 0 && v.to < 64 && (v.promo === undefined || ['Q', 'R', 'B', 'N'].includes(v.promo)) && (v.mk === undefined || typeof v.mk === 'boolean') && (v.define === undefined || ['Q', 'R', 'B', 'N'].includes(v.define)) && (v.board === undefined || v.board === 'main' || v.board === 'aux');
 }
 
 /** Sends the current picture to the guest and shows it here. */
@@ -447,10 +450,24 @@ export function playerMove(move: Move) {
   const m = findLegal(s.game.pos, move);
   if (!m || !room) return;
   const t = now();
-  room.send({ t: 'move', move: { from: move.from, to: move.to, promo: move.promo, mk: move.mk, define: move.define }, used: Math.round(t - turnStart.at) });
+  room.send({ t: 'move', move: { from: move.from, to: move.to, promo: move.promo, mk: move.mk, define: move.define, board: move.board }, used: Math.round(t - turnStart.at) });
   const g = s.game;
   const clock = g.clock ? { ...g.clock, [s.myColor]: g.clock[s.myColor] - (t - s.gameAt), running: other(s.myColor) } : null;
   patch({ game: { ...g, pos: play(g.pos, m), lastMove: m, clock, drawOffer: g.drawOffer === s.myColor ? g.drawOffer : null }, gameAt: t });
+}
+
+/** Revival: choose where your waiting piece goes (or which piece makes room). */
+export function playerPlace(sqr: number) {
+  const s = roomStore.get();
+  if (!s.game || s.game.result || !s.myColor || actorOf(s.game.pos) !== s.myColor) return;
+  if (s.role === 'host') {
+    if (!match) return;
+    const next = placeIn(match, match.hostColor, sqr, null, now());
+    if (next) {
+      match = next;
+      publish();
+    }
+  } else room?.send({ t: 'place', sq: sqr, used: Math.round(now() - turnStart.at) });
 }
 
 /** Rental: give up one of your units toward the rent you owe. */

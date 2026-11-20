@@ -4,6 +4,7 @@
 // end the game by themselves; nobody has to claim them.
 
 import { findKing, findLegal, inCheck, legalMoves, play } from './standard';
+import { revivalEnd } from './revival';
 import { isLightSquare, other, type Color, type Move, type MoveInfo, type Position } from './types';
 
 export type BoardEnd =
@@ -98,6 +99,15 @@ export function boardEnd(g: BoardGame, repetition = true): BoardEnd | null {
     if (wGone) return { reason: 'kingLost', winner: 'b' };
     if (bGone) return { reason: 'kingLost', winner: 'w' };
   }
+  if (pos.variant === 'revival' && pos.revival) {
+    // Checkmate on the main board; stalemate with no move on either board; repetition (both boards) and fifty moves.
+    const e = revivalEnd(pos);
+    if (e) return e;
+    if (pos.revival.queue.length) return null;
+    if (repetition && (g.seen[repetitionKey(pos)] ?? 0) >= 3) return { reason: 'repetition' };
+    if (pos.halfmove >= 100) return { reason: 'fifty' };
+    return null;
+  }
   if (pos.variant === 'rental' && pos.rental) {
     const r = pos.rental;
     // Rent owed: the mover is choosing units to give up. With only the king left, it is bankruptcy.
@@ -153,6 +163,11 @@ export function repetitionKey(pos: Position): string {
   if (pos.extra !== null && pos.extra !== undefined) s += ` x${pos.extra}`;
   // Bario: the cycle count is part of the position (spec section 6); promotions change the caps.
   if (pos.bario) s += ` c${pos.bario.cycles.w}.${pos.bario.cycles.b} p${pos.bario.promos.w}.${pos.bario.promos.b}`;
+  // Revival: both boards are part of the position (spec section 6), and where the turn stands.
+  if (pos.revival) {
+    const r = pos.revival;
+    s += ' aux' + r.aux.map((p) => (p ? (p.color === 'w' ? p.kind : p.kind.toLowerCase()) + (p.promoted ? '+' : '') : '.')).join('') + ` ${r.mainDone ? 1 : 0}${r.auxDone ? 1 : 0} q${r.queue.length} e${r.auxEp ?? '-'}`;
+  }
   return s;
 }
 

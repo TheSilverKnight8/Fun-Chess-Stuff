@@ -185,6 +185,17 @@ function handle(e: FxEvent, add: Add, kick: Kick) {
     remorseFx(add, kick, g, e.ev);
     return;
   }
+  if (e.t === 'leave' || e.t === 'enter' || e.t === 'gone') {
+    const c = g.center(e.sq);
+    if (e.t === 'gone') {
+      // Gone for good: the piece crumbles to grey dust.
+      shatter(add, { ...e.piece }, c.x, c.y, g.sq, 0);
+      dust(add, c.x, c.y, g.sq * 1.4, 60);
+      floatWord(add, c.x, c.y - g.sq * 0.7, g.sq, 'Gone', INK, 120);
+    } else if (e.t === 'leave') transferLeave(add, g, e.piece, c, e.board);
+    else transferEnter(add, kick, g, c, e.board);
+    return;
+  }
   if (e.t === 'cycle') {
     // Bario: a ripple across every Quantum as they come undone.
     e.squares.forEach((s, i) => {
@@ -365,6 +376,68 @@ function rentalFx(add: Add, kick: Kick, g: Geom, ev: RentalEvent, me: Color, squ
 }
 
 // ---------------------------------------------------------------- the effects
+
+/** Revival: a piece rises out of its board in a column of light and fades. */
+function transferLeave(add: Add, g: Geom, piece: Piece, c: { x: number; y: number }, from: 'main' | 'aux') {
+  const dpr = window.devicePixelRatio || 1;
+  const img = document.createElement('canvas');
+  img.width = img.height = Math.ceil(g.sq * dpr);
+  const ictx = img.getContext('2d');
+  if (!ictx) return;
+  ictx.scale(dpr, dpr);
+  drawPiece(ictx, piece.color, piece.kind, 0, 0, g.sq);
+  const glow = from === 'main' ? RED : '#f2c94c';
+  add({
+    layer: 'front',
+    life: 600,
+    draw(ctx, _age, k) {
+      // The column of light.
+      ctx.globalAlpha = (1 - k) * 0.6;
+      const grad = ctx.createLinearGradient(0, c.y - g.sq * 3, 0, c.y + g.sq / 2);
+      grad.addColorStop(0, 'rgba(255,248,238,0)');
+      grad.addColorStop(1, glow);
+      ctx.fillStyle = grad;
+      ctx.fillRect(c.x - g.sq * 0.4, c.y - g.sq * 3, g.sq * 0.8, g.sq * 3.5);
+      // The piece rising and thinning out.
+      ctx.globalAlpha = 1 - k;
+      const s = g.sq * (1 - k * 0.3);
+      ctx.drawImage(img, c.x - s / 2, c.y - s / 2 - g.sq * 1.6 * easeOut(k), s, s * (1 + k * 0.6));
+    },
+  });
+  spark(add, c.x, c.y, g.sq * 1.2, 0, glow);
+}
+
+/** Revival: a piece arrives in a beam from above, with a ring where it lands. */
+function transferEnter(add: Add, kick: Kick, g: Geom, c: { x: number; y: number }, to: 'main' | 'aux') {
+  const glow = to === 'main' ? '#f2c94c' : RED;
+  add({
+    layer: 'front',
+    life: 650,
+    draw(ctx, _age, k) {
+      const drop = Math.min(1, k / 0.35);
+      ctx.globalAlpha = fadeOut(k, 0.4);
+      ctx.fillStyle = glow;
+      const w = g.sq * (0.9 - 0.5 * k);
+      ctx.fillRect(c.x - w / 2, g.y - 10, w, (c.y - g.y + 10) * drop);
+      ctx.fillStyle = 'rgba(255,248,238,0.8)';
+      ctx.fillRect(c.x - w / 6, g.y - 10, w / 3, (c.y - g.y + 10) * drop);
+    },
+  });
+  add({
+    layer: 'front',
+    delay: 220,
+    life: 500,
+    draw(ctx, _age, k) {
+      ctx.globalAlpha = 1 - k;
+      ctx.strokeStyle = glow;
+      ctx.lineWidth = g.sq * 0.12 * (1 - k);
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, g.sq * (0.3 + 0.8 * easeOut(k)), 0, Math.PI * 2);
+      ctx.stroke();
+    },
+  });
+  kick(6, 220);
+}
 
 /** Mega Knight: the leap's shadow on the board, shrinking at the top of the arc. */
 function leapShadow(add: Add, g: Geom, f: { x: number; y: number }, t: { x: number; y: number }) {

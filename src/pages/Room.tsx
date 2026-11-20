@@ -1,10 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
-import { BookOpen, Check, Coins, Dices, Flag, Zap, Handshake, Loader2, LogOut, Play, RefreshCw, Swords, UserRound, WifiOff } from 'lucide-react';
+import { BookOpen, Check, Coins, Dices, Flag, Layers, Zap, Handshake, Loader2, LogOut, Play, RefreshCw, Swords, UserRound, WifiOff } from 'lucide-react';
 import { Board } from '../board/Board';
 import { useGameManual } from '../guide/Guide';
 import { EffectsLayer } from '../effects/EffectsLayer';
 import { useClockTicks, useGameFx } from '../effects/useGameFx';
+import { useRevival } from '../effects/useRevival';
 import { setTension } from '../lib/audio/music';
 import { sfx } from '../lib/audio/sfx';
 import { useMusic } from '../lib/audio/useMusic';
@@ -24,6 +25,7 @@ import {
   leaveRoom,
   playerAction,
   playerEvict,
+  playerPlace,
   playerDraw,
   playerMove,
   playerResign,
@@ -332,6 +334,10 @@ function GameScreen({ s, game, onLeave }: { s: RoomScreen; game: GameView; onLea
   const { openManual: openGuide, manual } = useGameManual(game.mode);
   useMusic(MODE_TRACK[game.mode] ?? null);
   const { holeHidden } = useGameFx(game, me, s.reconnecting !== null);
+  // Revival: one board visible at a time (Caleb's design).
+  const rv = useRevival(game, me);
+  const revival = game.pos.revival;
+  const head = revival?.queue[0];
 
   const landscape = size.w >= 700 && size.w >= size.h * 1.15;
   const PANEL = 340;
@@ -351,16 +357,20 @@ function GameScreen({ s, game, onLeave }: { s: RoomScreen; game: GameView; onLea
   const drained = !!r && r.winner === null && r.reason !== 'forfeit' && r.reason !== 'left';
   const flagged = r && (r.reason === 'timeout' || r.reason === 'timeoutDraw') && game.clock ? (game.clock.w <= 0 ? 'w' : game.clock.b <= 0 ? 'b' : null) : null;
 
+  const viewDone = revival ? (rv.view === 'main' ? revival.mainDone : revival.auxDone) : false;
   const board = (
+    <div key={`${game.number}-${rv.flips}`} className={cx(revival && rv.flips > 0 && 'animate-board-flip')}>
     <Board
       key={game.number}
-      pos={game.pos}
+      pos={rv.shown ?? game.pos}
       orientation={me}
-      canMove={canMove}
-      lastMove={game.lastMove}
+      canMove={canMove && !viewDone && !head}
+      lastMove={!revival || (game.lastMove?.board ?? 'main') === rv.view ? game.lastMove : null}
+      pick={head && head.owner === me && head.board === rv.view && !over ? { squares: head.options, onPick: playerPlace, remove: head.mode === 'displace' } : null}
+      tint={revival && rv.view === 'aux' ? 'rgb(0 38 87 / 0.18)' : null}
       showLegal={settings.legalMoves}
       showLast={settings.lastMove}
-      onMove={playerMove}
+      onMove={(mv) => playerMove(revival ? { ...mv, board: rv.view } : mv)}
       intro={game.pos.fullmove === 1 && game.pos.turn === 'w' && !over}
       fallen={fallen}
       drained={drained}
@@ -369,11 +379,13 @@ function GameScreen({ s, game, onLeave }: { s: RoomScreen; game: GameView; onLea
       onEvict={game.pos.rental?.owed !== null && game.pos.rental?.owed !== undefined && game.pos.turn === me && !over ? playerEvict : null}
       rentRise={game.pos.rental ? rentRise(Math.floor(plyOf(game.pos) / 2)) : null}
     />
+    </div>
   );
   const opponentBar = (
     <PlayerBar color={them} mine={false} clock={clockOf(them)} toMove={!over && game.pos.turn === them} note={opponentNote(s, game, them, elapsed)} cracked={flagged === them} money={game.pos.rental?.treasury[them] ?? null} />
   );
   const myBar = <PlayerBar color={me} mine clock={clockOf(me)} toMove={!over && game.pos.turn === me} note={myNote(s, game, me)} cracked={flagged === me} money={game.pos.rental?.treasury[me] ?? null} />;
+  const revivalBar = revival ? <RevivalBar game={game} me={me} view={rv.view} onView={(v) => rv.setView(v)} /> : null;
   const lower = over ? <ResultPanel s={s} game={game} me={me} onLeave={onLeave} onGuide={openGuide} /> : <Actions s={s} game={game} me={me} onLeave={onLeave} onGuide={openGuide} />;
 
   return (
@@ -389,6 +401,7 @@ function GameScreen({ s, game, onLeave }: { s: RoomScreen; game: GameView; onLea
                 {opponentBar}
                 <div className="flex flex-col gap-3">
                   <ModeTag game={game} />
+                  {revivalBar}
                   {myBar}
                   {lower}
                 </div>
@@ -398,6 +411,7 @@ function GameScreen({ s, game, onLeave }: { s: RoomScreen; game: GameView; onLea
             <div className="flex flex-col gap-2" style={{ width: boardSize }}>
               {opponentBar}
               {board}
+              {revivalBar}
               {myBar}
               <div className="min-h-[120px]">{lower}</div>
             </div>
@@ -406,6 +420,37 @@ function GameScreen({ s, game, onLeave }: { s: RoomScreen; game: GameView; onLea
       </div>
       {manual}
     </PlayLayout>
+  );
+}
+
+/** Revival: which board is showing (with a button to flip to the other), and what is left of the turn. */
+function RevivalBar({ game, me, view, onView }: { game: GameView; me: Color; view: 'main' | 'aux'; onView: (v: 'main' | 'aux') => void }) {
+  const r = game.pos.revival!;
+  const head = r.queue[0];
+  const mine = game.pos.turn === me;
+  const onAux = r.aux.filter(Boolean).length;
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-xl border-2 border-navy bg-surface px-3 py-2">
+      <Button size="sm" variant={view === 'aux' ? 'navy' : 'secondary'} press onClick={() => onView(view === 'main' ? 'aux' : 'main')}>
+        <Layers className="size-4" />
+        {view === 'main' ? `Auxiliary board (${onAux})` : 'Main board'}
+      </Button>
+      <span className="min-w-0 flex-1 text-xs text-muted">
+        {head ? (
+          head.owner === me ? (
+            <span className="text-accent">{head.mode === 'place' ? 'Choose where your piece arrives.' : 'No free starting square: choose a piece to remove.'}</span>
+          ) : (
+            'Your opponent is placing a piece…'
+          )
+        ) : mine ? (
+          <>
+            Main move: <b>{r.mainDone ? 'done' : 'to do'}</b> · Aux move: <b>{r.auxDone ? 'done' : 'to do'}</b>
+          </>
+        ) : (
+          'Your opponent is playing both boards.'
+        )}
+      </span>
+    </div>
   );
 }
 
