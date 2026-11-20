@@ -228,7 +228,7 @@ Caleb: "a visual animated guidebook for each mode accessible in game at all time
 
 ### How it is shown
 
-- Mega Knight: the mega knight is a red knight drawn over its 2x2 with a dashed red outline. On your turn a bar says "Move a piece, or roll" with a **Roll** button; after a 6 it says "move a mega knight", the mega knight glows, and its landing spots show as dashed red 2x2 boxes: tap one (with several mega knights, tap the one to move first).
+- Mega Knight: the mega knight is a red knight drawn over its 2x2 with a dashed red outline, in an elaborate helmet (Caleb's request): a steel faceplate with a forehead spike, eye guard, rivets and gold trim, a ridged steel crest over the mane, a gold collar and a tall red plume. The manuals draw it the same way. On your turn a bar says "Move a piece, or roll" with a **Roll** button; after a 6 it says "move a mega knight", the mega knight glows, and its landing spots show as dashed red 2x2 boxes: tap one (with several mega knights, tap the one to move first).
 - Remorse: a status badge on the piece's corner: **D** with its turns left (devastated, and the piece slumps grey), **G** (guilt-ridden, blue), **P** with its captures (psychopath, red), **B** with its captures (bloodlust, dark red, and the piece throbs with a red aura). During an extra move a bar offers **Skip**.
 
 ### Effects, sounds and music

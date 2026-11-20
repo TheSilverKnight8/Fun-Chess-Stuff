@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { PieceArt } from '../board/PieceArt';
+import { MegaKnightFigure } from '../board/Board';
 import type { Color, Kind } from '../chess/types';
 import { cx } from '../components/ui';
 
@@ -232,7 +233,9 @@ export function GuideBoard({ scene, className }: { scene: Scene; className?: str
           const c2 = place(a + 9);
           return (
             <div key={`mk${i}`} className="pointer-events-none absolute z-[1] transition-all duration-500 ease-out" style={{ left: `${Math.min(c1.col, c2.col) * 12.5}%`, top: `${(Math.min(c1.row, c2.row) * 100) / rows}%`, width: '25%', height: `${200 / rows}%` }}>
-              <PieceArt color="w" kind="N" className="h-full w-full [filter:sepia(1)_saturate(6)_hue-rotate(-30deg)]" />
+              <svg viewBox="0 0 100 100" className="h-full w-full" aria-label="Mega knight">
+                <MegaKnightFigure />
+              </svg>
             </div>
           );
         })}

@@ -288,19 +288,53 @@ function StatusBadge({ p }: { p: Piece }) {
   );
 }
 
-/** Mega Knight: the neutral mega knight, a knight drawn twice the size in red with a navy outline. */
+/**
+ * Mega Knight: the neutral mega knight, a red knight drawn over its 2x2 in an
+ * elaborate helmet (Caleb's request): a steel faceplate with a forehead spike,
+ * eye guard and rivets, gold trim, a ridged crest over the mane, and a tall
+ * plume streaming back.
+ */
 function MegaKnightArt() {
   return (
     <svg viewBox="0 0 100 100" className="h-full w-full drop-shadow-[0_8px_6px_rgb(0_38_87/0.35)]" aria-label="Mega knight">
       <rect x="3" y="3" width="94" height="94" rx="10" fill="rgb(252 63 63 / 0.14)" stroke="var(--accent)" strokeWidth="2.5" strokeDasharray="6 5" />
-      <g transform="translate(6 4) scale(0.88)" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M22 89h56a3 3 0 0 0 3-3v-3a5 5 0 0 0-5-5H24a5 5 0 0 0-5 5v3a3 3 0 0 0 3 3z" fill="#fc3f3f" stroke="#002657" strokeWidth="3.4" />
-        <path d="M29 78c1-10 6-17 13-23-5 2-10 3-15 2-5-1-9-5-8-10 0-4 4-7 8-10 6-5 10-11 13-18l3-9 5 7 4-6 3 9c11 6 18 18 19 33 1 11-1 19-3 25z" fill="#fc3f3f" stroke="#002657" strokeWidth="3.4" />
-        <path d="M58 16c9 7 13 19 13 33M45 47c-2 4-2 7 0 9" fill="none" stroke="#faeeda" strokeWidth="2.4" />
-        <circle cx="41" cy="31" r="3.2" fill="#002657" />
-        <path d="M30 84h40" stroke="#faeeda" strokeWidth="2.4" />
-      </g>
+      <MegaKnightFigure />
     </svg>
+  );
+}
+
+/** The helmeted mega knight itself, on a 100 x 100 grid (also used by the manuals). */
+export function MegaKnightFigure() {
+  return (
+    <g transform="translate(6 6) scale(0.88)" strokeLinecap="round" strokeLinejoin="round">
+      {/* The plume, streaming back from the crown. */}
+      <path d="M56 12c10-12 26-12 36-4-8-1-14 2-17 6 8-2 15 0 20 6-9-3-16-1-21 3 6 0 11 3 13 8-8-4-17-4-26 0z" fill="#fc3f3f" stroke="#002657" strokeWidth="2.6" />
+      <path d="M62 10c8-4 16-4 24-1M66 16c7-2 14-1 20 3M67 22c5-1 10 1 14 4" fill="none" stroke="#faeeda" strokeWidth="1.6" />
+      {/* Plinth and body. */}
+      <path d="M22 89h56a3 3 0 0 0 3-3v-3a5 5 0 0 0-5-5H24a5 5 0 0 0-5 5v3a3 3 0 0 0 3 3z" fill="#fc3f3f" stroke="#002657" strokeWidth="3.4" />
+      <path d="M29 78c1-10 6-17 13-23-5 2-10 3-15 2-5-1-9-5-8-10 0-4 4-7 8-10 6-5 10-11 13-18l3-9 5 7 4-6 3 9c11 6 18 18 19 33 1 11-1 19-3 25z" fill="#fc3f3f" stroke="#002657" strokeWidth="3.4" />
+      {/* Crest: a ridged steel band down the back of the head, gold edged. */}
+      <path d="M57 15c9 6 15 15 17 26l-6 2c-2-9-6-17-13-23z" fill="#c9d1db" stroke="#002657" strokeWidth="2.4" />
+      <path d="M60 20l4-3M64 25l5-3M67 31l5-2M69 37l5-2" stroke="#002657" strokeWidth="1.6" />
+      {/* Faceplate (chamfron) over forehead and nose. */}
+      <path d="M21 44c2-4 6-7 10-10 6-5 10-11 13-18l3-6 6 7-2 9c-3 9-9 17-17 22-5 3-9 2-13-4z" fill="#c9d1db" stroke="#002657" strokeWidth="2.6" />
+      <path d="M24 43c6-3 12-8 16-14M33 37l11-15" fill="none" stroke="#f2c94c" strokeWidth="1.8" />
+      {/* Forehead spike. */}
+      <path d="M41 21l-11-15 16 9z" fill="#e6ebf1" stroke="#002657" strokeWidth="2.2" />
+      <path d="M33 10l9 8" stroke="#f2c94c" strokeWidth="1.4" />
+      {/* Eye guard: a raised ring with the eye slit. */}
+      <circle cx="43" cy="30" r="5.4" fill="#e6ebf1" stroke="#002657" strokeWidth="2.2" />
+      <path d="M39.5 30h7" stroke="#002657" strokeWidth="2.4" />
+      {/* Rivets along the plate. */}
+      {[[27, 41], [35, 35], [47, 22], [50, 14], [38, 42]].map(([x, y], i) => (
+        <circle key={i} cx={x} cy={y} r="1.3" fill="#002657" />
+      ))}
+      {/* Gold collar where the helmet meets the neck, and the plinth's line. */}
+      <path d="M44 52c6 4 14 5 22 3" fill="none" stroke="#f2c94c" strokeWidth="3" />
+      <path d="M44 52c6 4 14 5 22 3" fill="none" stroke="#002657" strokeWidth="1" />
+      <path d="M58 30c7 6 11 13 12 21" fill="none" stroke="#faeeda" strokeWidth="2.2" />
+      <path d="M30 84h40" stroke="#faeeda" strokeWidth="2.4" />
+    </g>
   );
 }
 
