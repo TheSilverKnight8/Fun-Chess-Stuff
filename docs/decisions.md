@@ -8,8 +8,8 @@ Macro to micro, with a test checkpoint at the end of each stage. Each mode stage
 
 1. **Foundation and Standard Chess:** the app shell in the Portal style; the board and piece art; click and drag input; the legal-move and last-move highlight settings; the full Standard rules with the section 6 draws; rooms by code, the room setup (mode, time control), random colors and clocks; resign with confirm, draw offers, disconnect forfeit with a reconnect grace period, Rematch and Back to mode pick; the installable app and publishing. **(done)**
 2. **Audio and Standard's effects:** the sound engine, music, and the capture, check and checkmate effects. The effects plan is shown to Caleb before it is built. This sets up how every later mode plugs in its own effects. **(done)**
-3. **Bastille and Pot-Hole.** **(this stage)**
-4. **Remorse and Mega Knight.**
+3. **Bastille and Pot-Hole.** **(done)**
+4. **Remorse and Mega Knight**, plus the guidebook (Caleb's request). **(this stage)**
 5. **Bario and Rental.**
 6. **Revival.**
 7. **Tuning** from Caleb's playtests.
@@ -188,6 +188,16 @@ Proposed by Claude Code, approved by Caleb ("all effects"). Display only: nothin
 
 - **Storming** (Bastille Chess): a revolutionary march, G minor, 120 beats a minute, a square-wave fife lead over snare-heavy drums. Tension: a snare roll and a sawtooth arpeggio.
 - **Bumpy Road** (Pot-Hole Chess): a lurching, swung tune in D, 104 beats a minute, a bouncing octave bass and a lead that keeps jumping. Tension: doubled kicks and a square-wave arpeggio.
+
+## Guidebook (Stage 4, Caleb's request)
+
+Caleb: "a visual animated guidebook for each mode accessible in game at all times. Manuals can also be accessible by any player in the menu."
+
+| Item | Choice |
+| --- | --- |
+| Where | Home → **Manuals** (a list of all eight modes, each opening its manual page), for anyone. In a game, a **book button** beside Leave (and a **Manual** button on the end-of-game panel) opens the current mode's manual as a sheet over the game. The game keeps running behind it (it is an online game; the clock does not stop). |
+| What | Each manual is a set of short sections in the spec's words, most with an animated scene on a small board that plays and loops: pieces moving, highlighted squares, captures, dice, potholes, palace walls, captions (`src/guide/`). Scenes start only when scrolled into view. |
+| Content | Standard: the aim, the six pieces, castling, en passant, promotion, check and checkmate, draws, clocks and leaving. Bastille and Pot-Hole: their rules (including Claude Code's Stage 3 calls), then the pieces. Modes not built yet say their manual arrives with them. Remorse and Mega Knight get theirs in this stage. |
 
 ## Testing (Stage 3)
 

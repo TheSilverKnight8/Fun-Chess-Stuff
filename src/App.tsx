@@ -4,6 +4,7 @@ import { useSettings } from './lib/settings';
 import { Home } from './pages/Home';
 import { RoomPage } from './pages/Room';
 import { SettingsPage } from './pages/Settings';
+import { GuidePage, ManualsPage } from './guide/Guide';
 
 export default function App() {
   return (
@@ -12,6 +13,8 @@ export default function App() {
         <Route path="/" element={<Home />} />
         <Route path="/room" element={<RoomPage />} />
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/guide" element={<ManualsPage />} />
+        <Route path="/guide/:mode" element={<GuidePage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       <DialogHost />

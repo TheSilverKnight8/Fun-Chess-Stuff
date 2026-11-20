@@ -1,7 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
-import { Check, Flag, Handshake, Loader2, LogOut, Play, RefreshCw, Swords, UserRound, WifiOff } from 'lucide-react';
+import { BookOpen, Check, Flag, Handshake, Loader2, LogOut, Play, RefreshCw, Swords, UserRound, WifiOff } from 'lucide-react';
 import { Board } from '../board/Board';
+import { GuideSheet } from '../guide/Guide';
 import { EffectsLayer } from '../effects/EffectsLayer';
 import { useClockTicks, useGameFx } from '../effects/useGameFx';
 import { setTension } from '../lib/audio/music';
@@ -325,6 +326,8 @@ function GameScreen({ s, game, onLeave }: { s: RoomScreen; game: GameView; onLea
   useTicker(running || (!!game.away && !over) || s.reconnecting !== null);
   const [box, size] = useSize<HTMLDivElement>();
   const shakeRef = useRef<HTMLDivElement>(null);
+  const [guide, setGuide] = useState(false);
+  const openGuide = () => setGuide(true);
   useMusic(MODE_TRACK[game.mode] ?? null);
   const { holeHidden } = useGameFx(game, me, s.reconnecting !== null);
 
@@ -367,7 +370,7 @@ function GameScreen({ s, game, onLeave }: { s: RoomScreen; game: GameView; onLea
     <PlayerBar color={them} mine={false} clock={clockOf(them)} toMove={!over && game.pos.turn === them} note={opponentNote(s, game, them, elapsed)} cracked={flagged === them} />
   );
   const myBar = <PlayerBar color={me} mine clock={clockOf(me)} toMove={!over && game.pos.turn === me} note={myNote(s, game, me)} cracked={flagged === me} />;
-  const lower = over ? <ResultPanel s={s} game={game} me={me} onLeave={onLeave} /> : <Actions s={s} game={game} me={me} onLeave={onLeave} />;
+  const lower = over ? <ResultPanel s={s} game={game} me={me} onLeave={onLeave} onGuide={openGuide} /> : <Actions s={s} game={game} me={me} onLeave={onLeave} onGuide={openGuide} />;
 
   return (
     <PlayLayout>
@@ -397,6 +400,7 @@ function GameScreen({ s, game, onLeave }: { s: RoomScreen; game: GameView; onLea
           ))}
         </div>
       </div>
+      {guide && <GuideSheet mode={game.mode} onClose={() => setGuide(false)} />}
     </PlayLayout>
   );
 }
@@ -470,7 +474,7 @@ function PlayerBar({ color, mine, clock, toMove, note, cracked = false }: { colo
   );
 }
 
-function Actions({ s, game, me, onLeave }: { s: RoomScreen; game: GameView; me: Color; onLeave: () => void }) {
+function Actions({ s, game, me, onLeave, onGuide }: { s: RoomScreen; game: GameView; me: Color; onLeave: () => void; onGuide: () => void }) {
   const live = s.status === 'open' && s.reconnecting === null;
   const resign = async () => {
     if (await confirmDialog({ title: 'Resign?', body: 'Your opponent wins the game.', confirm: 'Resign', danger: true })) playerResign();
@@ -498,6 +502,9 @@ function Actions({ s, game, me, onLeave }: { s: RoomScreen; game: GameView; me: 
         <Button size="md" variant="danger" press className="flex-1" disabled={!live} onClick={() => void resign()}>
           <Flag className="size-4" />
           Resign
+        </Button>
+        <Button size="md" variant="ghost" press className="border-2 border-navy" onClick={onGuide} title="Manual" aria-label="Open the manual">
+          <BookOpen className="size-4" />
         </Button>
         <Button size="md" variant="ghost" press className="border-2 border-navy" onClick={onLeave} title="Leave the room">
           <LogOut className="size-4" />
@@ -537,7 +544,7 @@ function resultLine(r: Result, me: Color) {
   }
 }
 
-function ResultPanel({ s, game, me, onLeave }: { s: RoomScreen; game: GameView; me: Color; onLeave: () => void }) {
+function ResultPanel({ s, game, me, onLeave, onGuide }: { s: RoomScreen; game: GameView; me: Color; onLeave: () => void; onGuide: () => void }) {
   const r = game.result!;
   const host = s.role === 'host';
   const open = s.status === 'open';
@@ -563,6 +570,10 @@ function ResultPanel({ s, game, me, onLeave }: { s: RoomScreen; game: GameView; 
         <Button size="sm" variant="ghost" press className="border-2 border-navy" onClick={onLeave}>
           <LogOut className="size-4" />
           Leave room
+        </Button>
+        <Button size="sm" variant="ghost" press className="border-2 border-navy" onClick={onGuide} aria-label="Open the manual">
+          <BookOpen className="size-4" />
+          Manual
         </Button>
       </div>
       {!host && open && <p className="mt-2 text-xs text-muted">The host chooses a rematch or a new mode.</p>}

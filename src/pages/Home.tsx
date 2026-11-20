@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { DoorOpen, LogIn, Settings as SettingsIcon } from 'lucide-react';
+import { BookOpen, DoorOpen, LogIn, Settings as SettingsIcon } from 'lucide-react';
 import { useMusic } from '../lib/audio/useMusic';
 import { PageLayout } from '../components/Layout';
 import { Button, ButtonLink, Card } from '../components/ui';
@@ -78,6 +78,10 @@ export function Home() {
           </form>
         </Card>
         <div className="grid content-start gap-5">
+          <ButtonLink to="/guide" size="lg" press className="w-full animate-rise border-2 border-navy" style={{ animationDelay: '100ms' }}>
+            <BookOpen className="size-5" />
+            Manuals
+          </ButtonLink>
           <ButtonLink to="/settings" size="lg" press className="w-full animate-rise border-2 border-navy" style={{ animationDelay: '120ms' }}>
             <SettingsIcon className="size-5" />
             Settings
