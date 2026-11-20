@@ -6,6 +6,7 @@
 import type { Color, MoveInfo, Position } from '../chess/types';
 import type { Result } from '../game/match';
 import type { Roll } from '../chess/pothole';
+import type { RemorseEvent } from '../chess/remorse';
 
 export type FxEvent =
   | { t: 'start' }
@@ -19,7 +20,12 @@ export type FxEvent =
       king: number;
       /** This move ends the game by checkmate. */
       mate: boolean;
+      /** Remorse: this was a psychopath's extra move. */
+      extraMove?: boolean;
     }
+  | { t: 'mkroll'; d6: number }
+  | { t: 'formed'; anchors: number[] }
+  | { t: 'remorse'; ev: RemorseEvent }
   | { t: 'roll'; roll: Roll }
   | { t: 'end'; result: Result; pos: Position; me: Color; afterMove: boolean; extraDelay: number };
 
@@ -50,3 +56,6 @@ export const ROLL = { dieStart: SLIDE_MS + 100, dieLand: SLIDE_MS + 550, d8Start
 
 /** When the pothole cracks open, or null if none opens. */
 export const openAt = (roll: Roll) => (roll.opened === null ? null : ROLL.open + (roll.tries.length - 1) * ROLL.reroll);
+
+/** Mega Knight: when a leaping mega knight lands (it moves over 0.5 s on the board). */
+export const MK_LAND = 480;

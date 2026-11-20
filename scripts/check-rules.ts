@@ -6,6 +6,9 @@
 import { checkers, fromFen, inCheck, legalMoves, play, startPosition } from '../src/chess/standard.ts';
 import { deadPosition, newBoardGame, playMove, repetitionKey, sideCannotMate, type BoardGame } from '../src/chess/status.ts';
 import { potholeStep } from '../src/chess/pothole.ts';
+import { rollMega } from '../src/chess/megaknight.ts';
+import { remorseStep, skipExtra } from '../src/chess/remorse.ts';
+import { formMegaKnights, findLegal } from '../src/chess/standard.ts';
 import { parseSquare, type Position, type Variant } from '../src/chess/types.ts';
 
 let failed = false;
@@ -246,6 +249,112 @@ console.log('\nPot-Hole');
   const busy = potholeStep(rnd.pos, 2, seq([1]), 'random');
   check(busy.roll.opened === null && busy.pos.hole?.turns === 3, 'only one pothole at a time: an even roll while one is open opens nothing');
   check(repetitionKey(rnd.pos) !== repetitionKey({ ...rnd.pos, hole: { sq: rnd.pos.hole!.sq, turns: 2 } }), 'the pothole and its turns left are part of the position');
+}
+
+// ---------------------------------------------------------------- Mega Knight
+
+console.log('\nMega Knight');
+{
+  const mkPos = (fen: string, mk: string[]): Position => ({ ...fromFen(fen), variant: 'megaknight', mk: mk.map(P) });
+  const start = mkPos(START_FEN, ['d4']);
+  check(legalMoves(start).length === 18 && !has(start, 'd2', 'd4') && !has(start, 'e2', 'e4'), 'start: the mega knight on d4-e5 blocks the d and e pawns’ double steps (18 moves)');
+  const blocked = mkPos('4k3/8/8/8/8/8/8/R3K3 w - - 0 1', ['b1']);
+  check(!has(blocked, 'a1', 'b1') && !has(blocked, 'a1', 'd1') && has(blocked, 'a1', 'a5'), 'pieces cannot enter or pass the mega knight');
+  check(has(mkPos('4k3/8/8/8/8/8/8/1N2K3 w - - 0 1', ['b2']), 'b1', 'd2') && !has(mkPos('4k3/8/8/8/8/8/8/1N2K3 w - - 0 1', ['c3']), 'b1', 'c3'), 'knights jump over it but cannot land on it');
+  check(!inCheck(mkPos('4k3/8/8/8/8/8/8/4R1K1 b - - 0 1', ['e4'])), 'it blocks a line of check');
+  // Rolling.
+  let g = newBoardGame(mkPos('4k3/8/8/8/8/8/8/4K3 w - - 0 1', ['d4']));
+  const after3 = rollMega(g, 3);
+  check(after3.pos.turn === 'b' && !after3.end, 'a roll of 1-5 does nothing and the turn passes');
+  const after6 = rollMega(g, 6);
+  check(after6.pos.mkRoll === true && after6.pos.turn === 'w' && legalMoves(after6.pos).every((m) => m.mk), 'a 6: the turn’s move is a mega knight move');
+  // Crushing.
+  g = newBoardGame(mkPos('4k3/8/8/8/8/8/2pp4/4K3 w - - 0 1', ['b3']));
+  g = rollMega(g, 6);
+  const crush = playMove(g, { from: P('b3'), to: P('c1'), mk: true });
+  check(!!crush && crush.pos.board[P('c2')] === null && crush.pos.board[P('d2')] === null && crush.pos.mk!.includes(P('c1')), 'landing crushes every piece under the 2x2');
+  g = newBoardGame(mkPos('8/8/8/8/8/3k4/8/K7 w - - 0 1', ['b4']));
+  g = rollMega(g, 6);
+  const kc = playMove(g, { from: P('b4'), to: P('c2'), mk: true });
+  check(kc?.end?.reason === 'kingLost' && 'winner' in kc.end && kc.end.winner === 'w', 'a crushed king loses');
+  // In check: a non-6 is checkmate; a 6 must get out of check.
+  const chk = newBoardGame(mkPos('4k3/8/8/8/8/8/8/r3K3 w - - 0 1', ['g6']));
+  check(rollMega(chk, 2).end?.reason === 'checkmate', 'in check, a roll that is not a 6 is checkmate');
+  const chk6 = rollMega(chk, 6);
+  check(chk6.end?.reason === 'checkmate', 'in check, a 6 with no mega knight move that resolves it is checkmate');
+  const save = newBoardGame(mkPos('4k3/8/8/8/8/8/8/r3K3 w - - 0 1', ['b3']));
+  const save6 = rollMega(save, 6);
+  check(!save6.end && legalMoves(save6.pos).some((m) => m.to === P('a1')), 'in check, a 6 can crush the checking piece');
+  // Mega knights capture each other only by covering all four squares.
+  const two = mkPos('4k3/8/8/8/8/8/8/4K3 w - - 0 1', ['a1', 'b3']);
+  const twoR = { ...two, mkRoll: true };
+  check(legalMoves(twoR).some((m) => m.from === P('a1') && m.to === P('b3')) && !legalMoves(twoR).some((m) => m.from === P('a1') && m.to === P('c2')), 'a full overlap captures another mega knight; a partial one is not allowed');
+  // Four knights in a 2x2.
+  const f = formMegaKnights(mkPos('4k3/8/8/8/8/8/Nn6/Nn2K3 w - - 0 1', []));
+  check(f.formed.length === 1 && f.pos.board[P('a1')] === null && f.pos.mk!.includes(P('a1')), 'four knights of any colors in a 2x2 become a mega knight');
+}
+
+// ---------------------------------------------------------------- Remorse
+
+console.log('\nRemorse');
+{
+  const rp = (fen: string): Position => ({ ...fromFen(fen), variant: 'remorse', extra: null });
+  const one = (n: number) => () => n;
+  const capture = (pos: Position, from: string, to: string, d6: number) => {
+    const m = findLegal(pos, { from: P(from), to: P(to) })!;
+    return remorseStep(pos, play(pos, m), m, 1, one(d6 - 1));
+  };
+  const base = rp('4k3/8/8/3p4/4P3/8/8/4K3 w - - 0 1');
+  let r = capture(base, 'e4', 'd5', 1);
+  check(r.pos.board[P('d5')]?.status === 'devastated', 'a 1: devastated');
+  check(!legalMoves({ ...r.pos, turn: 'w' }).some((m) => m.from === P('d5')), 'a devastated piece cannot act');
+  r = capture(base, 'e4', 'd5', 3);
+  check(r.pos.board[P('d5')]?.status === 'guilt', 'a 2 or 3: guilt-ridden');
+  r = capture(base, 'e4', 'd5', 5);
+  check(!r.pos.board[P('d5')]?.status, 'a 4 or 5: unaffected');
+  r = capture(base, 'e4', 'd5', 6);
+  check(r.pos.board[P('d5')]?.status === 'psycho' && r.pos.turn === 'w' && r.pos.extra === P('d5'), 'a 6: psychopath, with an extra move at once');
+  check(legalMoves(r.pos).every((m) => m.from === P('d5')), 'the extra move is by that piece only');
+  const sk = skipExtra(r.pos, 1);
+  check(sk.pos.turn === 'b' && sk.pos.extra === null, 'the extra move can be skipped');
+  // Guilt-ridden pieces cannot capture and do not give check.
+  const guilt = rp('4k3/8/8/8/8/8/8/R3K3 w - - 0 1');
+  guilt.board[P('a1')] = { ...guilt.board[P('a1')]!, status: 'guilt' };
+  check(!inCheck({ ...guilt, turn: 'b', board: (() => { const b = guilt.board.slice(); b[P('a8')] = b[P('a1')]; b[P('a1')] = null; return b; })() }), 'a guilt-ridden piece does not give check');
+  // Devastated: self-captures after three of its owner's turns.
+  r = capture(base, 'e4', 'd5', 1);
+  let pos = { ...r.pos };
+  const ownerTurn = (p: Position) => skipExtra({ ...p, turn: 'w' }, 1).pos;
+  pos = ownerTurn(pos);
+  check(!!pos.board[P('d5')], 'still there after one more turn');
+  pos = ownerTurn(pos);
+  pos = ownerTurn(pos);
+  check(pos.board[P('d5')] === null, '...gone after its owner’s third turn');
+  // Bloodlust after three psychopath captures; it can only move to capture, friendly pieces included.
+  const bl = rp('4k3/8/8/2p1p3/3P4/8/8/4K3 w - - 0 1');
+  bl.board[P('d4')] = { ...bl.board[P('d4')]!, status: 'psycho', kills: 2 };
+  r = capture(bl, 'd4', 'e5', 6);
+  check(r.pos.board[P('e5')]?.status === 'bloodlust', 'the third capture as a psychopath brings bloodlust');
+  const bl2 = rp('4k3/8/8/8/8/8/3PN3/4K3 w - - 0 1');
+  bl2.board[P('d2')] = { ...bl2.board[P('d2')]!, status: 'bloodlust', kills: 3 };
+  bl2.board[P('e2')] = { ...bl2.board[P('e2')]!, kind: 'N' };
+  const blMoves = legalMoves(bl2).filter((m) => m.from === P('d2'));
+  check(blMoves.length === 0, 'with nothing to capture, a bloodlust piece cannot move');
+  const bl3 = rp('4k3/8/8/8/8/4N3/3P4/6K1 w - - 0 1');
+  bl3.board[P('d2')] = { ...bl3.board[P('d2')]!, status: 'bloodlust', kills: 3 };
+  check(legalMoves(bl3).some((m) => m.from === P('d2') && m.to === P('e3')), 'a bloodlust pawn can capture a friendly piece');
+  // Absolving: a bishop moving next to an afflicted piece clears it.
+  const ab = rp('4k3/8/8/8/8/8/3P4/1B2K3 w - - 0 1');
+  ab.board[P('d2')] = { ...ab.board[P('d2')]!, status: 'devastated', due: 3 };
+  const am = findLegal(ab, { from: P('b1'), to: P('c2') })!;
+  const abs = remorseStep(ab, play(ab, am), am, 1, one(0));
+  check(!abs.pos.board[P('d2')]?.status && abs.ev.absolved.includes(P('d2')), 'a bishop moving next to it absolves the piece');
+  // A devastated king that captures itself loses.
+  const dk = rp('4k3/8/8/8/8/8/8/R3K3 w - - 0 1');
+  dk.board[P('e1')] = { ...dk.board[P('e1')]!, status: 'devastated', due: 1 };
+  const gone = skipExtra({ ...dk }, 1).pos;
+  const end = newBoardGame(gone).end;
+  check(end?.reason === 'kingLost' && 'winner' in end && end.winner === 'b', 'a devastated king that captures itself loses');
 }
 
 console.log(failed ? '\nSome checks FAILED' : '\nAll checks passed');

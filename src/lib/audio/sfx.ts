@@ -212,6 +212,49 @@ export const sfx = {
   crown() {
     notes([88, 91, 96], { type: 'triangle', step: 0.05, dur: 0.25, gain: 0.1 });
   },
+  /** Mega Knight: a 6! */
+  six() {
+    clack(0, 1.5, 1);
+    notes([72, 79, 84], { type: 'square', step: 0.06, dur: 0.18, gain: 0.1, at: 0.05 });
+    tone(60, { type: 'sine', to: 40, dur: 0.4, gain: 0.3 });
+  },
+  /** Mega Knight: the mega knight lands, a huge footfall. */
+  mkLand() {
+    tone(65, { type: 'sine', to: 25, dur: 0.8, gain: 0.6 });
+    noise({ filter: 'lowpass', hz: 500, toHz: 120, dur: 0.6, gain: 0.7 });
+    noise({ at: 0.02, filter: 'bandpass', hz: 1500, dur: 0.25, gain: 0.25 });
+  },
+  /** Mega Knight: four knights become one. */
+  form() {
+    tone(200, { type: 'sawtooth', to: 900, dur: 0.5, gain: 0.08 });
+    notes([60, 67, 72, 79], { type: 'square', step: 0.07, dur: 0.2, gain: 0.08, at: 0.35 });
+    tone(55, { at: 0.6, type: 'sine', to: 30, dur: 0.6, gain: 0.45 });
+  },
+  /** Remorse: the sound of the status a capture rolled. */
+  status(s: string | null) {
+    if (s === 'devastated') {
+      tone(220, { type: 'sawtooth', to: 70, dur: 1, gain: 0.1 });
+      tone(110, { type: 'triangle', to: 55, dur: 1, gain: 0.18 });
+    } else if (s === 'guilt') notes([71, 69, 67, 64], { type: 'triangle', step: 0.14, dur: 0.22, gain: 0.13 });
+    else if (s === 'psycho') {
+      notes([84, 85, 84, 85], { type: 'sawtooth', step: 0.05, dur: 0.08, gain: 0.07 });
+      noise({ filter: 'highpass', hz: 4000, dur: 0.3, gain: 0.15 });
+    } else if (s === 'bloodlust') {
+      tone(90, { type: 'sawtooth', to: 50, dur: 0.9, gain: 0.2 });
+      noise({ filter: 'bandpass', hz: 400, toHz: 150, q: 3, dur: 0.9, gain: 0.5 });
+      notes([60, 61, 60], { type: 'square', step: 0.12, dur: 0.15, gain: 0.08, at: 0.2 });
+    } else notes([72], { type: 'triangle', step: 0, dur: 0.12, gain: 0.1 });
+  },
+  /** Remorse: a bishop absolves. */
+  halo() {
+    notes([79, 83, 86, 91], { type: 'triangle', step: 0.07, dur: 0.6, gain: 0.08 });
+    noise({ at: 0.1, filter: 'highpass', hz: 7000, dur: 0.6, gain: 0.06 });
+  },
+  /** Remorse: a devastated piece captures itself, a slow collapse. */
+  collapse() {
+    tone(180, { type: 'triangle', to: 60, dur: 1.1, gain: 0.2 });
+    noise({ at: 0.6, filter: 'lowpass', hz: 600, dur: 0.4, gain: 0.4 });
+  },
   /** Manual: a page turning (a paper swish). */
   pageTurn() {
     noise({ filter: 'bandpass', hz: 1800, toHz: 4500, q: 0.8, dur: 0.28, gain: 0.22 });

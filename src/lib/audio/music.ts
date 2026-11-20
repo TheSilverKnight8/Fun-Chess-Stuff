@@ -7,7 +7,7 @@ import { getAudio, whenAudioStarts } from './engine';
 // A game track can have a tension layer that fades in while a king is in check
 // or a clock is low (setTension).
 
-export type TrackId = 'menu' | 'standard' | 'bastille' | 'pothole';
+export type TrackId = 'menu' | 'standard' | 'bastille' | 'pothole' | 'megaknight' | 'remorse';
 
 interface Track {
   bpm: number;
@@ -142,7 +142,67 @@ const pothole: Track = {
   },
 };
 
-const TRACKS: Record<TrackId, Track> = { menu, standard, bastille, pothole };
+// "Colossus" (Mega Knight Chess): heavy and stomping, C minor (Cm, Ab, Eb, Bb, Cm, Ab, G, G),
+// a sawtooth lead over half-time drums that land like footsteps. Tension: a pounding kick and arpeggio.
+const cmin = [55, 60, 63];
+const abM = [56, 60, 63];
+const ebM = [55, 58, 63];
+const bbM = [53, 58, 62];
+const gM = [55, 59, 62];
+const megaknight: Track = {
+  bpm: 92,
+  leadType: 'sawtooth',
+  lead: [
+    ...bar(72, 0, 0, 75, 74, 0, 72, 0),
+    ...bar(68, 0, 0, 72, 75, 0, 0, 0),
+    ...bar(70, 0, 67, 70, 75, 0, 74, 0),
+    ...bar(74, 0, 0, 70, 65, 0, 0, 0),
+    ...bar(79, 0, 0, 77, 75, 0, 72, 0),
+    ...bar(80, 0, 79, 0, 77, 75, 72, 0),
+    ...bar(71, 0, 74, 0, 79, 0, 77, 0),
+    ...bar(74, 0, 71, 0, 67, 0, 0, 0),
+  ],
+  bass: [36, 32, 39, 34, 36, 32, 31, 31].flatMap((r) => bar(r, 0, 0, r, r + 12, 0, r, 0)),
+  chords: [cmin, abM, ebM, bbM, cmin, abM, gM, gM].flatMap((ch) => [ch, null, null, null, null, null, null, null]),
+  drums: rep(['k...s..k'], 8).join(''),
+  tension: {
+    drums: rep(['k.k.s.kk'], 8).join(''),
+    arp: [cmin, abM, ebM, bbM, cmin, abM, gM, gM].flatMap((ch) => [ch[0] + 12, ch[1] + 12, ch[2] + 12, ch[1] + 12, ch[0] + 12, ch[1] + 12, ch[2] + 12, ch[1] + 12]),
+    arpType: 'sawtooth',
+  },
+};
+
+// "Remorse" (Remorse Chess): uneasy and creeping, E minor (Em, C, Am, B7, Em, C, F#dim, B7),
+// a thin square lead that sighs downward, sparse drums. Tension: a frantic square arpeggio and running hats.
+const em = [55, 59, 64];
+const cM = [55, 60, 64];
+const amn = [57, 60, 64];
+const b7 = [54, 59, 63];
+const fdim = [54, 57, 60];
+const remorse: Track = {
+  bpm: 84,
+  leadType: 'square',
+  lead: [
+    ...bar(76, 0, 75, 76, 71, 0, 0, 0),
+    ...bar(72, 0, 71, 72, 67, 0, 0, 0),
+    ...bar(69, 0, 72, 0, 76, 0, 74, 72),
+    ...bar(71, 0, 0, 0, 75, 0, 0, 0),
+    ...bar(79, 0, 78, 79, 76, 0, 0, 0),
+    ...bar(76, 0, 74, 72, 71, 0, 72, 0),
+    ...bar(69, 0, 66, 0, 72, 0, 69, 0),
+    ...bar(71, 0, 0, 0, 63, 0, 66, 0),
+  ],
+  bass: [40, 36, 45, 35, 40, 36, 42, 35].flatMap((r) => bar(r, 0, 0, 0, r + 7, 0, 0, 0)),
+  chords: [em, cM, amn, b7, em, cM, fdim, b7].flatMap((ch) => [null, null, ch, null, null, null, ch, null]),
+  drums: rep(['k..h..s.'], 8).join(''),
+  tension: {
+    drums: rep(['hhhhshhh'], 8).join(''),
+    arp: [em, cM, amn, b7, em, cM, fdim, b7].flatMap((ch) => [ch[2] + 12, ch[1] + 12, ch[0] + 12, ch[1] + 12, ch[2] + 12, ch[1] + 12, ch[0] + 12, ch[1] + 12]),
+    arpType: 'square',
+  },
+};
+
+const TRACKS: Record<TrackId, Track> = { menu, standard, bastille, pothole, megaknight, remorse };
 
 const midiHz = (m: number) => 440 * 2 ** ((m - 69) / 12);
 const LOOKAHEAD = 0.2;

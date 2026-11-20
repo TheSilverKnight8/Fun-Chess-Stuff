@@ -195,5 +195,109 @@ export const GUIDES: Partial<Record<ModeId, GuideSection[]>> = {
     CLOCKS,
     ...PIECES,
   ],
+
+  megaknight: [
+    {
+      title: 'The mega knight',
+      text: ['Standard Chess plus one neutral mega knight: a knight as big as four squares. It starts in the centre (d4, e4, d5, e5), belongs to nobody, and either player can move it.'],
+      scene: { setup: ['wKe1', 'bKe8', 'wPd2', 'wPe2', 'bPd7', 'bPe7'], mk: ['d4'], steps: [{ t: 'mark', squares: ['d4', 'e4', 'd5', 'e5'], tone: 'good' }, { t: 'wait', ms: 800 }] },
+    },
+    {
+      title: 'Move or roll',
+      text: [
+        'On your turn, either move one of your pieces or roll a die. A 6 means you move a mega knight as that turn’s move. Anything else does nothing, and your turn is used.',
+        'If there is more than one mega knight, you pick which one. If none of its moves is allowed, the 6 does nothing.',
+      ],
+      scene: { setup: ['wKe1', 'bKe8'], mk: ['d4'], ranks: [2, 7], steps: [{ t: 'die', value: 3 }, { t: 'caption', text: 'A 3: nothing happens.' }, { t: 'die', value: null }, { t: 'die', value: 6 }, { t: 'caption', text: 'A 6: move the mega knight.' }, { t: 'die', value: null }, { t: 'mk', at: ['f5'] }] },
+    },
+    {
+      title: 'How it moves, and what it crushes',
+      text: [
+        'It jumps like a knight, two one way and one to the side, measured along the corners of the squares, and must land fully on the board.',
+        'Every piece under its four new squares is crushed, of either color, kings included.',
+      ],
+      scene: { setup: ['wKa1', 'bKh8', 'bPf5', 'wNg6', 'bRf6'], mk: ['d3'], steps: [{ t: 'mark', squares: ['f5', 'g5', 'f6', 'g6'], tone: 'danger' }, { t: 'mk', at: ['f5'] }, { t: 'remove', sq: 'f5' }, { t: 'remove', sq: 'g6' }, { t: 'remove', sq: 'f6' }, { t: 'caption', text: 'Three pieces crushed, both colors.' }] },
+    },
+    {
+      title: 'A wall nobody passes',
+      text: [
+        'No ordinary piece can enter, capture or pass through the mega knight’s squares, so it also blocks lines of check. Knights jump over it but cannot land on it.',
+        'Only another mega knight can take it, by landing exactly on all four of its squares. A move that covers it only partly is not allowed.',
+      ],
+      scene: { setup: ['wRa4', 'wKa1', 'bKh8'], mk: ['c4'], steps: [{ t: 'mark', squares: ['b4', 'a5', 'a6', 'a7', 'a8', 'a3', 'a2'] }, { t: 'caption', text: 'The rook stops at the mega knight.' }] },
+    },
+    {
+      title: 'Four knights make one',
+      text: ['If four knights of any colors end up in a 2x2 square, all four are removed and a new mega knight stands there.'],
+      scene: { setup: ['wNc3', 'bNd3', 'wNc4', 'wKa1', 'bKh8', 'bNf6'], ranks: [2, 7], steps: [{ t: 'move', from: 'f6', to: 'd4' }, { t: 'remove', sq: 'c3' }, { t: 'remove', sq: 'd3' }, { t: 'remove', sq: 'c4' }, { t: 'remove', sq: 'd4' }, { t: 'mk', at: ['c3'] }, { t: 'caption', text: 'A new mega knight.' }] },
+    },
+    {
+      title: 'Check, checkmate and crushed kings',
+      text: [
+        'The squares a mega knight could land on are not threats: they do not give check.',
+        'You may roll while in check: a 6 whose move gets you out (for example by crushing the checking piece) saves you. A roll that is not a 6, or a 6 that does not get you out, is checkmate.',
+        'A crushed king’s owner loses. If one move crushes both kings, the player who moved loses.',
+      ],
+      scene: { setup: ['wKe1', 'bRe5', 'bKh8'], mk: ['c3'], ranks: [1, 6], steps: [{ t: 'mark', squares: ['e1'], tone: 'danger' }, { t: 'die', value: 6 }, { t: 'die', value: null }, { t: 'mk', at: ['d4'] }, { t: 'remove', sq: 'e5' }, { t: 'caption', text: 'A 6 crushes the checking rook: out of check.' }] },
+    },
+    {
+      title: 'Draws',
+      text: [
+        'A player with no legal piece move who is not in check: stalemate, a draw. Threefold repetition (the mega knights are part of the position) and the fifty-move rule apply; a roll counts as a move, and a crush as a capture. No insufficient-material draw: the mega knight can crush kings.',
+      ],
+    },
+    CLOCKS,
+    ...PIECES,
+  ],
+
+  remorse: [
+    {
+      title: 'Remorse',
+      text: ['Standard Chess, except that capturing changes the piece that did it. When a piece with no status captures, a die is rolled for it.'],
+      scene: { setup: ['wKe1', 'bKe8', 'wNc3', 'bPd5'], ranks: [2, 6], steps: [{ t: 'move', from: 'c3', to: 'd5' }, { t: 'die', value: 4 }, { t: 'caption', text: 'A 4: unaffected.' }, { t: 'die', value: null }] },
+    },
+    {
+      title: '1: devastated',
+      text: ['The piece cannot do anything. If a bishop does not absolve it within its owner’s next three turns, it captures itself (it is removed).'],
+      scene: { setup: ['wKa1', 'bKh8', 'wRd1', 'bPd6'], ranks: [1, 7], steps: [{ t: 'move', from: 'd1', to: 'd6' }, { t: 'die', value: 1 }, { t: 'tag', sq: 'd6', text: 'Devastated 3', tone: 'navy' }, { t: 'die', value: null }, { t: 'tag', sq: 'd6', text: 'Devastated 2', tone: 'navy' }, { t: 'tag', sq: 'd6', text: 'Devastated 1', tone: 'navy' }, { t: 'remove', sq: 'd6' }, { t: 'tag', sq: 'd6', text: null }, { t: 'caption', text: 'Three turns later it is gone.' }] },
+    },
+    {
+      title: '2 or 3: guilt-ridden',
+      text: ['The piece can move but can never capture.'],
+      scene: { setup: ['wKa1', 'bKh8', 'wBc4', 'bPe6'], ranks: [2, 8], steps: [{ t: 'tag', sq: 'c4', text: 'Guilt', tone: 'navy' }, { t: 'mark', squares: ['b5', 'a6', 'd5', 'b3', 'd3', 'e2', 'f1'] }, { t: 'caption', text: 'e6 is in its path, but it cannot take it.' }] },
+    },
+    {
+      title: '4 or 5: unaffected',
+      text: ['No status. The piece rolls again the next time it captures.'],
+    },
+    {
+      title: '6: psychopath',
+      text: [
+        'After capturing, the piece gets an extra move straight away (you may skip it): another move by the same piece. It does not chain: a capture during the extra move gives no further extra move.',
+        'Each later capture by a psychopath gives an extra move too. After three captures (counting the one that rolled the 6) it gains bloodlust.',
+      ],
+      scene: { setup: ['wKa1', 'bKh8', 'wQd1', 'bPd5', 'bPg5'], steps: [{ t: 'move', from: 'd1', to: 'd5' }, { t: 'die', value: 6 }, { t: 'tag', sq: 'd5', text: 'Psycho 1' }, { t: 'die', value: null }, { t: 'caption', text: 'Extra move!' }, { t: 'move', from: 'd5', to: 'g5' }, { t: 'tag', sq: 'g5', text: 'Psycho 2' }, { t: 'caption', text: 'Its second capture; no further extra move this turn.' }] },
+    },
+    {
+      title: 'Bloodlust',
+      text: ['A bloodlust piece can only move to capture, and it can capture its own side’s pieces too (no roll: it already has a status). If it captures its own king, that player loses.'],
+      scene: { setup: ['wKa1', 'bKh8', 'wRd4', 'wNd7', 'bPg4'], steps: [{ t: 'tag', sq: 'd4', text: 'Bloodlust' }, { t: 'mark', squares: ['d7', 'g4'], tone: 'danger' }, { t: 'caption', text: 'It may only take: the black pawn or its own knight.' }, { t: 'move', from: 'd4', to: 'd7' }] },
+    },
+    {
+      title: 'Absolving',
+      text: ['Only bishops absolve, and they absolve every status. When one of your bishops ends its move next to (on any of the eight squares around) one of your afflicted pieces, that piece is cured: no status, and its psychopath count starts over. A bishop cannot absolve itself.'],
+      scene: { setup: ['wKa1', 'bKh8', 'wPe4', 'wBb1'], ranks: [1, 6], steps: [{ t: 'tag', sq: 'e4', text: 'Devastated 2', tone: 'navy' }, { t: 'move', from: 'b1', to: 'd3' }, { t: 'tag', sq: 'e4', text: null }, { t: 'caption', text: 'Absolved.' }] },
+    },
+    {
+      title: 'Check, kings and draws',
+      text: [
+        'Devastated and guilt-ridden pieces do not give check. A bloodlust piece does not give check to its own king.',
+        'If a devastated king captures itself, or a bloodlust piece takes its own king, that player loses. Checkmate wins as usual.',
+        'Draws as in Standard Chess; statuses are part of the position for threefold repetition. A pawn that promotes keeps its status.',
+      ],
+    },
+    CLOCKS,
+    ...PIECES,
+  ],
 };
 

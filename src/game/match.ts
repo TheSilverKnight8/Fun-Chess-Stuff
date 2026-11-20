@@ -2,10 +2,13 @@
 // referee: it checks every move, runs both clocks and ends the game). The guest
 // is sent a view of it after every change. Plain objects only.
 
-import { newBoardGame, playMove, sideCannotMate, type BoardGame } from '../chess/status';
+import { boardEnd, newBoardGame, playMove, repetitionKey, sideCannotMate, type BoardGame } from '../chess/status';
+import { formMegaKnights } from '../chess/standard';
+import { rollMega } from '../chess/megaknight';
+import { remorseStep, skipExtra, type RemorseEvent } from '../chess/remorse';
 import { startPosition } from '../chess/standard';
 import { potholeStep, type PotholeDuration, type Rand, type Roll } from '../chess/pothole';
-import { other, type Color, type Move, type MoveInfo, type Position } from '../chess/types';
+import { other, sq, type Color, type Move, type MoveInfo, type Position } from '../chess/types';
 import type { ModeId } from '../modes';
 import type { Variant } from '../chess/types';
 import type { TimeControl } from './time';
@@ -29,7 +32,9 @@ export type EndReason =
   /** Bastille: the loser's palace was emptied. */
   | 'palace'
   /** Bastille: one move emptied both palaces (a draw). */
-  | 'palaceBoth';
+  | 'palaceBoth'
+  /** Mega Knight: a king was crushed. Remorse: a king captured itself, or its own bloodlust piece took it. */
+  | 'kingLost';
 
 export interface Result {
   winner: Color | null;
@@ -51,7 +56,7 @@ export interface ModeOptions {
 
 export const DEFAULT_OPTIONS: ModeOptions = { potholeDuration: 'base' };
 
-const VARIANT: Partial<Record<ModeId, Variant>> = { bastille: 'bastille', pothole: 'pothole' };
+const VARIANT: Partial<Record<ModeId, Variant>> = { bastille: 'bastille', pothole: 'pothole', megaknight: 'megaknight', remorse: 'remorse' };
 
 export interface MatchState {
   /** Counts the games in this room, so a view can tell a new game from the last one. */
@@ -68,6 +73,12 @@ export interface MatchState {
   options: ModeOptions;
   /** Pot-Hole: the dice after the last move. */
   roll: Roll | null;
+  /** Remorse: what the last move did to statuses. */
+  remorse: RemorseEvent | null;
+  /** Mega Knight: the last roll, and its half-move. */
+  mkRoll: { ply: number; d6: number } | null;
+  /** Mega Knight: mega knights formed from four knights by the last move. */
+  formed: number[];
 }
 
 /** What both screens show. Clock times are as of the moment the view was made. */
@@ -83,6 +94,9 @@ export interface GameView {
   result: Result | null;
   options: ModeOptions;
   roll: Roll | null;
+  remorse: RemorseEvent | null;
+  mkRoll: { ply: number; d6: number } | null;
+  formed: number[];
   /** A player who lost connection, and how long they have to come back. */
   away: { color: Color; msLeft: number } | null;
 }
@@ -94,14 +108,24 @@ export function newMatch(number: number, mode: ModeId, time: TimeControl, hostCo
     mode,
     time,
     hostColor,
-    game: newBoardGame(startPosition(VARIANT[mode] ?? 'standard')),
+    game: newBoardGame(startFor(mode)),
     // White's clock runs from the start of the game.
     clock: time ? { w: ms, b: ms, running: 'w', stamp: now } : null,
     drawOffer: null,
     result: null,
     options,
     roll: null,
+    remorse: null,
+    mkRoll: null,
+    formed: [],
   };
+}
+
+/** The starting position of a mode. Mega Knight: one mega knight in the centre (d4, e4, d5, e5). */
+function startFor(mode: ModeId): Position {
+  const pos = startPosition(VARIANT[mode] ?? 'standard');
+  if (mode === 'megaknight') return { ...pos, mk: [sq(3, 3)] };
+  return pos;
 }
 
 /** Time left for a side right now. */
@@ -137,40 +161,95 @@ function timeoutResult(m: MatchState, flagged: Color): Result {
  * thought (null for the host, whose time the host's device measures itself).
  * Returns null if the move is not allowed.
  */
-export function moveIn(m: MatchState, color: Color, move: Move, reported: number | null, now: number, rand?: Rand): MatchState | null {
+/** Runs one action of the player to move with the clock: their time is charged; the increment is added only when the turn passes to the other player. */
+function takeTurn(m: MatchState, color: Color, reported: number | null, now: number, act: (g: BoardGame) => { game: BoardGame; patch?: Partial<MatchState> } | null): MatchState | null {
   if (m.result || m.game.pos.turn !== color) return null;
-  let clock = m.clock ? { ...m.clock } : null;
+  const clock = m.clock ? { ...m.clock } : null;
+  let used = 0;
   if (clock && m.time) {
     const measured = now - clock.stamp;
-    const used = reported === null ? measured : Math.min(measured, Math.max(reported, measured - LAG_CREDIT_MS));
+    used = reported === null ? measured : Math.min(measured, Math.max(reported, measured - LAG_CREDIT_MS));
     if (used >= clock[color]) return end(m, timeoutResult(m, color), now);
-    clock[color] = clock[color] - used + m.time.increment * 1000;
   }
-  // Pot-Hole: the host rolls the dice within the turn, after the move.
-  let roll: Roll | null = null;
-  const ply = (m.game.pos.fullmove - 1) * 2 + (m.game.pos.turn === 'b' ? 1 : 0) + 1;
-  const after =
-    m.game.pos.variant === 'pothole' && rand
-      ? (pos: Position) => {
-          const r = potholeStep(pos, ply, rand, m.options.potholeDuration);
-          roll = r.roll;
-          return r.pos;
-        }
-      : undefined;
-  const game = playMove(m.game, move, after);
-  if (!game) return null;
-  if (clock) {
-    clock.running = other(color);
+  const done = act(m.game);
+  if (!done) return null;
+  const { game } = done;
+  const passed = game.pos.turn !== color;
+  if (clock && m.time) {
+    clock[color] = clock[color] - used + (passed ? m.time.increment * 1000 : 0);
+    clock.running = passed ? other(color) : color;
     clock.stamp = now;
   }
   // A draw offer stays open until the player it was made to moves (or answers it).
   const drawOffer = m.drawOffer && m.drawOffer !== color ? null : m.drawOffer;
-  const next: MatchState = { ...m, game, clock, drawOffer, roll };
+  const next: MatchState = { ...m, game, clock, drawOffer, roll: null, remorse: null, mkRoll: null, formed: [], ...done.patch };
   if (game.end) {
     const e = game.end;
     return end(next, 'winner' in e ? { winner: e.winner, reason: e.reason } : { winner: null, reason: e.reason }, now);
   }
   return next;
+}
+
+/**
+ * A player's move. `reported` is the guest's own measure of how long they
+ * thought (null for the host, whose time the host's device measures itself).
+ * Returns null if the move is not allowed.
+ */
+export function moveIn(m: MatchState, color: Color, move: Move, reported: number | null, now: number, rand?: Rand): MatchState | null {
+  return takeTurn(m, color, reported, now, (g) => {
+    const variant = g.pos.variant;
+    const ply = plyOf(g.pos) + 1;
+    let roll: Roll | null = null;
+    let remorse: RemorseEvent | null = null;
+    let formed: number[] = [];
+    let after: ((pos: Position, mi: MoveInfo, prev: Position) => Position) | undefined;
+    // Pot-Hole: the host rolls the dice within the turn, after the move.
+    if (variant === 'pothole' && rand)
+      after = (pos) => {
+        const r = potholeStep(pos, ply, rand, m.options.potholeDuration);
+        roll = r.roll;
+        return r.pos;
+      };
+    // Mega Knight: four knights in a 2x2 become a mega knight.
+    if (variant === 'megaknight')
+      after = (pos) => {
+        const r = formMegaKnights(pos);
+        formed = r.formed;
+        return r.pos;
+      };
+    // Remorse: the capturing piece's roll, absolving, extra moves, self-captures.
+    if (variant === 'remorse' && rand)
+      after = (pos, mi, prev) => {
+        const r = remorseStep(prev, pos, mi, ply, rand);
+        remorse = r.ev;
+        return r.pos;
+      };
+    const game = playMove(g, move, after);
+    if (!game) return null;
+    return { game, patch: { roll, remorse, formed } };
+  });
+}
+
+/** Mega Knight: the player to move rolls the die instead of moving a piece. */
+export function rollIn(m: MatchState, color: Color, reported: number | null, now: number, rand: Rand): MatchState | null {
+  if (m.game.pos.variant !== 'megaknight' || m.game.pos.mkRoll) return null;
+  return takeTurn(m, color, reported, now, (g) => {
+    const d6 = rand(6) + 1;
+    return { game: rollMega(g, d6), patch: { mkRoll: { ply: plyOf(g.pos), d6 } } };
+  });
+}
+
+/** Remorse: the player passes on their psychopath's extra move. */
+export function skipIn(m: MatchState, color: Color, reported: number | null, now: number): MatchState | null {
+  const pos = m.game.pos;
+  if (pos.variant !== 'remorse' || pos.extra === null || pos.extra === undefined) return null;
+  return takeTurn(m, color, reported, now, (g) => {
+    const r = skipExtra(g.pos, plyOf(g.pos));
+    const key = repetitionKey(r.pos);
+    const game: BoardGame = { pos: r.pos, seen: { ...g.seen, [key]: (g.seen[key] ?? 0) + 1 }, lastMove: g.lastMove, end: null };
+    game.end = boardEnd(game);
+    return { game, patch: { remorse: r.ev } };
+  });
 }
 
 /**
@@ -217,6 +296,9 @@ export function viewOf(m: MatchState, now: number, away: GameView['away']): Game
     result: m.result,
     options: m.options,
     roll: m.roll,
+    remorse: m.remorse,
+    mkRoll: m.mkRoll,
+    formed: m.formed,
     away,
   };
 }
@@ -238,4 +320,5 @@ export const RESULT_TEXT: Record<EndReason, string> = {
   left: 'Left the game',
   palace: 'Palace emptied',
   palaceBoth: 'Both palaces emptied',
+  kingLost: 'King lost',
 };

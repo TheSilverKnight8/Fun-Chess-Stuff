@@ -3,7 +3,7 @@
 // insufficient material). Caleb's answer: repetition and the fifty-move rule
 // end the game by themselves; nobody has to claim them.
 
-import { findLegal, inCheck, legalMoves, play } from './standard';
+import { findKing, findLegal, inCheck, legalMoves, play } from './standard';
 import { isLightSquare, type Color, type Move, type MoveInfo, type Position } from './types';
 
 export type BoardEnd =
@@ -15,7 +15,9 @@ export type BoardEnd =
   /** Bastille: a palace was emptied; the winner is the other side. */
   | { reason: 'palace'; winner: Color }
   /** Bastille: one move emptied both palaces (Claude's call in the spec: a draw). */
-  | { reason: 'palaceBoth' };
+  | { reason: 'palaceBoth' }
+  /** Mega Knight: a king was crushed; Remorse: a king captured itself or was taken by its own bloodlust piece. */
+  | { reason: 'kingLost'; winner: Color };
 
 /** A game in progress on the board: the position plus what the draw rules need to remember. */
 export interface BoardGame {
@@ -37,20 +39,23 @@ export function newBoardGame(pos: Position): BoardGame {
  * Plays a move if it is legal. Returns the new game, or null for an illegal move
  * or a game that is already over.
  */
-export function playMove(g: BoardGame, move: Move, after?: (pos: Position) => Position): BoardGame | null {
+export function playMove(g: BoardGame, move: Move, after?: (pos: Position, m: MoveInfo, prev: Position) => Position): BoardGame | null {
   if (g.end) return null;
   const m = findLegal(g.pos, move);
   if (!m) return null;
   let pos = play(g.pos, m);
   // Something that happens after the move within the same turn (Pot-Hole's die
   // roll). Skipped when the move itself ends the game.
-  if (after && !boardEnd({ pos, seen: g.seen, lastMove: m, end: null }, false)) pos = after(pos);
+  if (after && (afterAlways(pos) || !boardEnd({ pos, seen: g.seen, lastMove: m, end: null }, false))) pos = after(pos, m, g.pos);
   const key = repetitionKey(pos);
   const seen = { ...g.seen, [key]: (g.seen[key] ?? 0) + 1 };
   const next: BoardGame = { pos, seen, lastMove: m, end: null };
   next.end = boardEnd(next);
   return next;
 }
+
+/** Modes whose after-move rules run even after a move that would otherwise end the game (Mega Knight's crush and knights forming, Remorse's statuses). */
+const afterAlways = (pos: Position) => pos.variant === 'megaknight' || pos.variant === 'remorse';
 
 /** Bastille's palaces: d1, e1, d2, e2 for White; d8, e8, d7, e7 for Black. */
 export const PALACE: Record<Color, number[]> = { w: [3, 4, 11, 12], b: [59, 60, 51, 52] };
@@ -78,11 +83,24 @@ export function boardEnd(g: BoardGame, repetition = true): BoardEnd | null {
     if (pos.halfmove >= 100) return { reason: 'fifty' };
     return null;
   }
+  if (pos.variant === 'megaknight' || pos.variant === 'remorse') {
+    // A king that is gone: crushed (Mega Knight), self-captured or eaten by its own bloodlust piece (Remorse).
+    const wGone = findKing(pos, 'w') < 0;
+    const bGone = findKing(pos, 'b') < 0;
+    // Both crushed by one move: the mover loses (the mover is the side not to move now).
+    if (wGone && bGone) return { reason: 'kingLost', winner: pos.turn };
+    if (wGone) return { reason: 'kingLost', winner: 'b' };
+    if (bGone) return { reason: 'kingLost', winner: 'w' };
+  }
   const moves = legalMoves(pos);
+  if (pos.variant === 'megaknight' && moves.length === 0 && inCheck(pos)) {
+    // In check with no piece move: the player may still roll (a 6 that gets out of check saves them).
+    return null;
+  }
   if (moves.length === 0) {
     return inCheck(pos) ? { reason: 'checkmate', winner: pos.turn === 'w' ? 'b' : 'w' } : { reason: 'stalemate' };
   }
-  if (deadPosition(pos)) return { reason: 'material' };
+  if (pos.variant !== 'megaknight' && deadPosition(pos)) return { reason: 'material' };
   if (repetition && (g.seen[repetitionKey(pos)] ?? 0) >= 3) return { reason: 'repetition' };
   if (pos.halfmove >= 100) return { reason: 'fifty' };
   return null;
@@ -99,13 +117,16 @@ export function repetitionKey(pos: Position): string {
   let s = '';
   for (let i = 0; i < 64; i++) {
     const p = pos.board[i];
-    s += p ? (p.color === 'w' ? p.kind : p.kind.toLowerCase()) : '.';
+    s += p ? (p.color === 'w' ? p.kind : p.kind.toLowerCase()) + (p.status ? `(${p.status}${p.kills ?? ''}${p.due ?? ''})` : '') : '.';
   }
   const c = pos.castling;
   s += ` ${pos.turn} ${c.w.k ? 'K' : ''}${c.w.q ? 'Q' : ''}${c.b.k ? 'k' : ''}${c.b.q ? 'q' : ''}`;
   if (pos.ep !== null && legalMoves(pos).some((m) => m.enPassant)) s += ` ep${pos.ep}`;
   // Pot-Hole: the open pothole is part of the position (spec section 6), with the moves it has left (Claude Code's reading).
   if (pos.hole) s += ` hole${pos.hole.sq}:${pos.hole.turns}`;
+  // Mega Knight: the mega knights; Remorse: statuses (above) and a pending extra move.
+  if (pos.mk?.length) s += ` mk${[...pos.mk].sort((a, b) => a - b).join(',')}`;
+  if (pos.extra !== null && pos.extra !== undefined) s += ` x${pos.extra}`;
   return s;
 }
 

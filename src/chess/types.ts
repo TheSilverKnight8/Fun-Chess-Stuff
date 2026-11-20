@@ -9,11 +9,20 @@ export type PromoKind = 'Q' | 'R' | 'B' | 'N';
 
 export const PROMO_KINDS: readonly PromoKind[] = ['Q', 'R', 'B', 'N'];
 
+/** Remorse Chess statuses (spec 7.8). */
+export type Status = 'devastated' | 'guilt' | 'psycho' | 'bloodlust';
+
 export interface Piece {
   /** Stays with the piece for the whole game, so the board can animate it. */
   id: number;
   color: Color;
   kind: Kind;
+  /** Remorse: the piece's status, if any. */
+  status?: Status;
+  /** Remorse: captures made as a psychopath (bloodlust at 3). */
+  kills?: number;
+  /** Remorse: a devastated piece's owner-turns left before it self-captures. */
+  due?: number;
 }
 
 export interface Castling {
@@ -24,7 +33,7 @@ export interface Castling {
 }
 
 /** Which rules the position is played under (the board-level modes). */
-export type Variant = 'standard' | 'bastille' | 'pothole';
+export type Variant = 'standard' | 'bastille' | 'pothole' | 'megaknight' | 'remorse';
 
 /** An open pothole (Pot-Hole Chess): its square, and how many more moves it stays open. */
 export interface Hole {
@@ -48,6 +57,12 @@ export interface Position {
   variant?: Variant;
   /** Pot-Hole: the open pothole, if any. */
   hole?: Hole | null;
+  /** Mega Knight: each mega knight's lower-left square (it covers that square, the one right of it, and the two above). */
+  mk?: number[];
+  /** Mega Knight: the side to move rolled a 6 and now moves a mega knight. */
+  mkRoll?: boolean;
+  /** Remorse: the square of a psychopath that has its extra move to make (same side to move). */
+  extra?: number | null;
 }
 
 /** A move as a player gives it. */
@@ -55,6 +70,8 @@ export interface Move {
   from: number;
   to: number;
   promo?: PromoKind;
+  /** Mega Knight: moves a mega knight (from and to are its lower-left squares). */
+  mk?: boolean;
 }
 
 /** A legal move with everything the board needs to show it. */
@@ -67,6 +84,10 @@ export interface MoveInfo extends Move {
   enPassant: boolean;
   /** A pawn's two-square first step. */
   double: boolean;
+  /** Mega Knight: the pieces crushed under the mega knight's new squares. */
+  crushed?: Piece[];
+  /** Mega Knight: the squares those pieces stood on (same order). */
+  crushedSq?: number[];
 }
 
 export const other = (c: Color): Color => (c === 'w' ? 'b' : 'w');

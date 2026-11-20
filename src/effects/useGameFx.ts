@@ -4,7 +4,7 @@ import { other, type Color } from '../chess/types';
 import { plyOf, type GameView } from '../game/match';
 import { setTension } from '../lib/audio/music';
 import { PIECE_VALUE, sfx } from '../lib/audio/sfx';
-import { ROLL, SLIDE_MS, emitFx, openAt } from './fx';
+import { MK_LAND, ROLL, SLIDE_MS, emitFx, openAt } from './fx';
 
 // Watches the game as it changes and starts the matching effects and sounds:
 // a new game, each move (capture, castling, promotion, check), Pot-Hole's
@@ -22,6 +22,11 @@ interface Seen {
   reconnecting: boolean;
   /** The half-move of the last Pot-Hole roll shown. */
   rollPly: number;
+  /** Mega Knight's last roll and Remorse's last event shown (keys). */
+  mkKey: string;
+  remorseKey: string;
+  /** Remorse: an extra move was waiting (so the next move is the extra move). */
+  extra: boolean;
 }
 
 export function useGameFx(game: GameView, me: Color, reconnecting: boolean) {
@@ -45,7 +50,11 @@ export function useGameFx(game: GameView, me: Color, reconnecting: boolean) {
   useEffect(() => {
     const prev = seen.current;
     const ply = plyOf(game.pos);
-    const now: Seen = { number: game.number, ply, ended: !!game.result, offer: game.drawOffer, away: !!game.away, reconnecting, rollPly: game.roll?.ply ?? -1 };
+    const now: Seen = { number: game.number, ply, ended: !!game.result, offer: game.drawOffer, away: !!game.away, reconnecting, rollPly: game.roll?.ply ?? -1,
+      mkKey: game.mkRoll ? `${game.mkRoll.ply}:${game.mkRoll.d6}` : '',
+      remorseKey: game.remorse ? JSON.stringify(game.remorse) : '',
+      extra: game.pos.extra !== null && game.pos.extra !== undefined,
+    };
     seen.current = now;
 
     const newGame = !prev || prev.number !== game.number;
@@ -61,13 +70,17 @@ export function useGameFx(game: GameView, me: Color, reconnecting: boolean) {
       const m = game.lastMove;
       const mate = game.result?.reason === 'checkmate';
       const checking = inCheck(game.pos) ? checkers(game.pos) : [];
-      emitFx({ t: 'move', m, pos: game.pos, checkers: checking, king: findKing(game.pos, game.pos.turn), mate });
-      if (m.captured) {
+      emitFx({ t: 'move', m, pos: game.pos, checkers: checking, king: findKing(game.pos, game.pos.turn), mate, extraMove: !!prev.extra });
+      if (m.mk) {
+        later(MK_LAND - 40, () => sfx.mkLand());
+        if (m.crushed?.length) later(MK_LAND, () => sfx.capture(9));
+      }
+      if (m.captured && !m.mk) {
         later(SLIDE_MS - 10, () => sfx.capture(PIECE_VALUE[m.captured!.kind]));
         if (m.captured.kind === 'K') later(SLIDE_MS + 90, () => sfx.crown());
       }
       else if (m.castle) later(SLIDE_MS - 10, () => sfx.castle());
-      else later(SLIDE_MS - 10, () => sfx.move());
+      else if (!m.mk) later(SLIDE_MS - 10, () => sfx.move());
       if (m.promo) later(SLIDE_MS + 20, () => sfx.promote());
       if (checking.length && !mate) later(SLIDE_MS + 60, () => sfx.check());
     }
@@ -116,6 +129,12 @@ export function useGameFx(game: GameView, me: Color, reconnecting: boolean) {
       } else if (r.reason === 'resign') {
         sfx.topple();
         later(900, () => (won ? sfx.win() : sfx.lose()));
+      } else if (r.reason === 'kingLost') {
+        later(d + (game.mode === 'megaknight' ? MK_LAND : 300), () => {
+          sfx.mateHit();
+          if (won) sfx.fanfare();
+          else sfx.mateLost();
+        });
       } else if (r.reason === 'palace' || r.reason === 'palaceBoth') {
         later(d, () => {
           sfx.crumble();
@@ -123,6 +142,30 @@ export function useGameFx(game: GameView, me: Color, reconnecting: boolean) {
         });
       } else if (DRAWS.has(r.reason)) later(d, () => sfx.draw());
       else won ? sfx.win() : sfx.lose();
+    }
+
+    // Mega Knight: a roll (on the screen of whoever sees it first: both).
+    if (!newGame && prev && now.mkKey && now.mkKey !== prev.mkKey && game.mkRoll) {
+      const d6 = game.mkRoll.d6;
+      emitFx({ t: 'mkroll', d6 });
+      sfx.dice();
+      later(450, () => (d6 === 6 ? sfx.six() : sfx.diceLand(false)));
+    }
+    // Mega Knight: four knights became a mega knight.
+    if (!newGame && moved && game.formed.length) {
+      emitFx({ t: 'formed', anchors: game.formed });
+      later(SLIDE_MS + 100, () => sfx.form());
+    }
+    // Remorse: the capture roll, absolving, self-captures.
+    if (!newGame && prev && now.remorseKey && now.remorseKey !== prev.remorseKey && game.remorse) {
+      const ev = game.remorse;
+      emitFx({ t: 'remorse', ev });
+      if (ev.d6 !== null) {
+        later(SLIDE_MS + 150, () => sfx.dice(true));
+        later(SLIDE_MS + 600, () => sfx.status(ev.status));
+      } else if (ev.bloodlust) later(SLIDE_MS + 300, () => sfx.status('bloodlust'));
+      if (ev.absolved.length) later(SLIDE_MS + 100, () => sfx.halo());
+      if (ev.selfCaptured.length) later(250, () => sfx.collapse());
     }
 
     // Small sounds.

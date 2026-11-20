@@ -24,6 +24,8 @@ export type Step =
   | { t: 'tag'; sq: string; text: string | null; tone?: 'red' | 'navy' }
   /** Tips a king over (checkmate, resignation, a crushed king). */
   | { t: 'fall'; sq: string }
+  /** Mega Knight: where the mega knights are (lower-left squares). */
+  | { t: 'mk'; at: string[] }
   | { t: 'wait'; ms: number };
 
 export interface Scene {
@@ -32,6 +34,8 @@ export interface Scene {
   steps: Step[];
   /** Draw Bastille's palace walls. */
   palaces?: boolean;
+  /** Mega knights at the start (lower-left squares). */
+  mk?: string[];
   /** Show the board from Black's side. */
   flip?: boolean;
   /** Show only some ranks (bottom..top, 1-8), to keep small scenes compact. */
@@ -60,6 +64,7 @@ export function GuideBoard({ scene, className }: { scene: Scene; className?: str
   const [caption, setCaption] = useState<string | null>(null);
   const [tags, setTags] = useState<Record<number, { text: string; tone: 'red' | 'navy' }>>({});
   const [last, setLast] = useState<[number, number] | null>(null);
+  const [mk, setMk] = useState<number[]>(() => (scene.mk ?? []).map(sqOf));
   const nextId = useRef(1000);
 
   useEffect(() => {
@@ -74,6 +79,7 @@ export function GuideBoard({ scene, className }: { scene: Scene; className?: str
       setCaption(null);
       setTags({});
       setLast(null);
+      setMk((scene.mk ?? []).map(sqOf));
     };
     const run = () => {
       if (!alive) return;
@@ -152,6 +158,10 @@ export function GuideBoard({ scene, className }: { scene: Scene; className?: str
         case 'wait':
           wait = s.ms;
           break;
+        case 'mk':
+          setMk(s.at.map(sqOf));
+          wait = 1000;
+          break;
       }
       timer = window.setTimeout(run, wait);
     };
@@ -217,6 +227,15 @@ export function GuideBoard({ scene, className }: { scene: Scene; className?: str
             </div>
           </div>
         )}
+        {mk.map((a, i) => {
+          const c1 = place(a);
+          const c2 = place(a + 9);
+          return (
+            <div key={`mk${i}`} className="pointer-events-none absolute z-[1] transition-all duration-500 ease-out" style={{ left: `${Math.min(c1.col, c2.col) * 12.5}%`, top: `${(Math.min(c1.row, c2.row) * 100) / rows}%`, width: '25%', height: `${200 / rows}%` }}>
+              <PieceArt color="w" kind="N" className="h-full w-full [filter:sepia(1)_saturate(6)_hue-rotate(-30deg)]" />
+            </div>
+          );
+        })}
         {pieces.map((p) =>
           inView(p.sq) ? (
             <div

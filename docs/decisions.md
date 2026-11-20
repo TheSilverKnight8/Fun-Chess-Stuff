@@ -9,7 +9,7 @@ Macro to micro, with a test checkpoint at the end of each stage. Each mode stage
 1. **Foundation and Standard Chess:** the app shell in the Portal style; the board and piece art; click and drag input; the legal-move and last-move highlight settings; the full Standard rules with the section 6 draws; rooms by code, the room setup (mode, time control), random colors and clocks; resign with confirm, draw offers, disconnect forfeit with a reconnect grace period, Rematch and Back to mode pick; the installable app and publishing. **(done)**
 2. **Audio and Standard's effects:** the sound engine, music, and the capture, check and checkmate effects. The effects plan is shown to Caleb before it is built. This sets up how every later mode plugs in its own effects. **(done)**
 3. **Bastille and Pot-Hole.** **(done)**
-4. **Remorse and Mega Knight**, plus the guidebook (Caleb's request). The guidebook is done and merged; the two modes are not built yet (see Questions for Caleb).
+4. **Remorse and Mega Knight**, plus the guidebook (Caleb's request). **(this stage)**
 5. **Bario and Rental.**
 6. **Revival.**
 7. **Tuning** from Caleb's playtests.
@@ -34,6 +34,7 @@ Macro to micro, with a test checkpoint at the end of each stage. Each mode stage
 | The phone's or computer's "reduce motion" setting | Do not follow it: the effects always play in full. |
 | Menu music (Stage 3) | A rendition of Caleb's piano piece (MIDI file). |
 | Stage 3 rule questions, effects and music | "Compose everything. For all the other stuff you can decide what to do": the Bastille and Pot-Hole tracks are Claude Code's, and the six rule readings below are Claude Code's calls (revisable). |
+| Stage 4 rule questions, effects and music | "Build stage 4 first with your picks": Claude Code's readings below, its effects proposal and its music. |
 
 ## Questions for Caleb (from Stage 1)
 
@@ -199,6 +200,58 @@ Caleb: "a visual animated guidebook for each mode accessible in game at all time
 | Flipbook (Caleb's request after Stage 4) | The manual is a book that drops down from the top of the screen (with a small bounce and a landing thud) onto a navy cover, then opens to cream pages. Each spread on a wide screen is one section: its words on the left page, its animated scene on the right, a shadowed spine between; on phones one page holds both. Pages turn with a 3D page flip and a paper swish: the next/previous arrows, a swipe, or the arrow keys. Page dots show where you are. Escape, the close button or a tap outside lifts the book away. |
 | What | Each manual is a set of short sections in the spec's words, most with an animated scene on a small board that plays and loops: pieces moving, highlighted squares, captures, dice, potholes, palace walls, captions (`src/guide/`). Scenes start only when scrolled into view. |
 | Content | Standard: the aim, the six pieces, castling, en passant, promotion, check and checkmate, draws, clocks and leaving. Bastille and Pot-Hole: their rules (including Claude Code's Stage 3 calls), then the pieces. Modes not built yet say their manual arrives with them. Remorse and Mega Knight get theirs in this stage. |
+
+## Mega Knight and Remorse (Stage 4)
+
+### Claude Code's readings (Caleb: "build stage 4 with your picks"; revisable)
+
+| Mode | Question | Choice |
+| --- | --- | --- |
+| Mega Knight | More than one mega knight | On a 6 the roller picks which one moves. |
+| Mega Knight | A 6 with no allowed mega knight move | The roll does nothing (in check: checkmate, per Caleb's rule). |
+| Mega Knight | The roller's own king | A mega knight move may not leave the roller's own king in check. Crushing your own king is allowed and loses (spec). |
+| Mega Knight | Knights | They jump over the mega knight but cannot land on it. It blocks every other piece and every line of check. |
+| Mega Knight | Stalemate | No legal piece move and not in check: stalemate, a draw. In check with no piece move, the player can still roll. |
+| Mega Knight | Fifty moves, board edge | A crush counts as a capture; a roll counts as a move (spec). The 2x2 must stay on the board. |
+| Remorse | The capture that rolls a 6 | Gets the extra move at once and counts as the first of the three captures toward bloodlust. |
+| Remorse | The extra move | Optional (a Skip button); any legal move by that piece; a capture during it gives no further extra move. Bloodlust pieces keep getting extra moves (they are psychopaths with bloodlust). |
+| Remorse | Bloodlust | Its only legal moves are captures, enemy or friendly. |
+| Remorse | Devastated | Removes itself at the end of its owner's third turn after the status (unless absolved first). |
+| Remorse | Absolving | A bishop's move ending next to (the 8 surrounding squares) afflicted friendly pieces clears all of them and resets the psychopath count. A bishop cannot absolve itself. |
+| Remorse | Own bloodlust piece and own king | It does not give check to its own king; if it captures it, that player loses (spec). |
+| Remorse | Promotion | A promoted pawn keeps its status and count. |
+
+### Things to know from playing it
+
+- **Mega Knight and repetition:** a roll that does nothing leaves the position as it was. Four rolls in a row with no 6 (two each) bring the starting position back a third time: a draw by threefold repetition (spec: repetition applies, the position includes the mega knight, and a roll counts as a move). Found in testing; Caleb may want rolls to change this.
+- **Mega Knight at the start:** the mega knight on d4, e4, d5, e5 blocks the d and e pawns' two-square first steps (they can still step one square).
+
+### How it is shown
+
+- Mega Knight: the mega knight is a red knight drawn over its 2x2 with a dashed red outline. On your turn a bar says "Move a piece, or roll" with a **Roll** button; after a 6 it says "move a mega knight", the mega knight glows, and its landing spots show as dashed red 2x2 boxes: tap one (with several mega knights, tap the one to move first).
+- Remorse: a status badge on the piece's corner: **D** with its turns left (devastated, and the piece slumps grey), **G** (guilt-ridden, blue), **P** with its captures (psychopath, red), **B** with its captures (bloodlust, dark red, and the piece throbs with a red aura). During an extra move a bar offers **Skip**.
+
+### Effects, sounds and music
+
+| Mode | Moment | Effect |
+| --- | --- | --- |
+| Mega Knight | Roll | A die tumbles to the centre; a 6 flashes red with a burst and a shake. |
+| Mega Knight | Its move | It leaps (half a second) with its shadow travelling under it; on landing a ring of dust, a heavy shake and a huge footfall; crushed pieces shatter. |
+| Mega Knight | Four knights | The four knights spiral together into one, with a burst and the banner "MEGA KNIGHT". |
+| Mega Knight | Crushed king | Shake and the banner "CRUSHED". |
+| Remorse | A capture's roll | A small die spins over the capturing piece, then its status word rises from it (DEVASTATED grey, GUILT-RIDDEN blue, UNAFFECTED navy, PSYCHOPATH! / BLOODLUST! red with a burst and shake), each with its own sound. |
+| Remorse | Extra move | Red afterimage streaks behind the psychopath. |
+| Remorse | Absolving | A gold halo and a soft light on each absolved piece, with a chime. |
+| Remorse | Self-capture | The piece shatters with a slow collapsing sound. A lost king gets the banner "KING LOST". |
+
+Music: **Colossus** (Mega Knight), heavy and stomping in C minor at 92 beats a minute, a sawtooth lead over half-time drums like footsteps; **Remorse** (Remorse Chess), uneasy and creeping in E minor at 84, a thin sighing square lead. Both have tension layers.
+
+Manuals for both modes, with scenes, are in the guidebook.
+
+## Testing (Stage 4)
+
+- `npm run check:rules` adds 13 Mega Knight checks (blocking, knights, check lines, rolls, crushing, crushed kings, rolling in check, mega knight captures, four-knight formation) and 18 Remorse checks (every roll result, devastated countdown and self-capture, guilt, psychopath extra move and skipping, bloodlust and friendly captures, absolving, a self-captured king).
+- Two-browser run: Mega Knight rolled until a 6 and the mega knight crushed pieces (both screens agree), Remorse captures with the same roll on both screens, and the manual flipbook opened in game. No errors. Frames checked by eye.
 
 ## Testing (Stage 3)
 

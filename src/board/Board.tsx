@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { findKing, inCheck, legalMoves } from '../chess/standard';
+import { findKing, inCheck, legalMoves, megaSquares } from '../chess/standard';
 import { palaceCount } from '../chess/status';
-import { KIND_NAME, fileOf, rankOf, sq, type Color, type Move, type MoveInfo, type Position, type PromoKind } from '../chess/types';
+import { KIND_NAME, fileOf, rankOf, sq, type Piece, type Color, type Move, type MoveInfo, type Position, type PromoKind } from '../chess/types';
 import { cx } from '../components/ui';
 import { PieceArt } from './PieceArt';
 
@@ -52,6 +52,7 @@ export function Board({ pos, orientation, canMove, lastMove, showLegal, showLast
   const [selected, setSelected] = useState<number | null>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
   const [promo, setPromo] = useState<{ from: number; to: number } | null>(null);
+  const [mkPick, setMkPick] = useState<number | null>(null);
 
   const moves = useMemo(() => (canMove ? legalMoves(pos) : []), [pos, canMove]);
   // Forget a selection that no longer makes sense (the position changed under it).
@@ -78,6 +79,12 @@ export function Board({ pos, orientation, canMove, lastMove, showLegal, showLast
     return { x: (clientX - r.left) / r.width, y: (clientY - r.top) / r.height };
   };
 
+  // Mega Knight: after a 6, pick a mega knight (it is chosen for you if there is only one), then where it lands.
+  const mkMoves = pos.mkRoll && canMove ? moves.filter((m) => m.mk) : [];
+  const mkFrom = mkMoves.length ? (mkPick !== null && mkMoves.some((m) => m.from === mkPick) ? mkPick : new Set(mkMoves.map((m) => m.from)).size === 1 ? mkMoves[0].from : null) : null;
+  const mkTargets = mkFrom === null ? [] : mkMoves.filter((m) => m.from === mkFrom);
+  const megaAt = (s: number) => (pos.mk ?? []).find((a) => megaSquares(a).includes(s)) ?? null;
+
   const tryMove = (from: number, to: number) => {
     const options = moves.filter((m) => m.from === from && m.to === to);
     if (options.length === 0) return false;
@@ -91,6 +98,17 @@ export function Board({ pos, orientation, canMove, lastMove, showLegal, showLast
     if (promo || e.button > 0) return;
     const s = squareAt(e.clientX, e.clientY);
     if (s === null || !canMove) return;
+    if (pos.mkRoll) {
+      const target = mkTargets.find((m) => megaSquares(m.to).includes(s));
+      if (target && mkFrom !== null) {
+        onMove({ from: mkFrom, to: target.to, mk: true });
+        setMkPick(null);
+        return;
+      }
+      const a = megaAt(s);
+      if (a !== null) setMkPick(a);
+      return;
+    }
     const piece = pos.board[s];
     if (piece && piece.color === pos.turn) {
       e.currentTarget.setPointerCapture(e.pointerId);
@@ -175,6 +193,29 @@ export function Board({ pos, orientation, canMove, lastMove, showLegal, showLast
       {/* Bastille: each side's palace, walled. */}
       {pos.variant === 'bastille' && (['w', 'b'] as const).map((c) => <PalaceWall key={c} color={c} flip={flip} pos={pos} />)}
 
+      {/* Mega Knight: the neutral 2x2 mega knights. */}
+      {(pos.mk ?? []).map((a, i) => {
+        const cells = megaSquares(a).map(place);
+        const col = Math.min(...cells.map((c) => c.col));
+        const row = Math.min(...cells.map((c) => c.row));
+        return (
+          <div
+            key={`mk${i}`}
+            data-mk={a}
+            className={cx('pointer-events-none absolute z-[1] transition-all duration-500 ease-out', mkFrom === a && 'drop-shadow-[0_0_10px_var(--accent)]')}
+            style={{ left: `${col * 12.5}%`, top: `${row * 12.5}%`, width: '25%', height: '25%' }}
+          >
+            <MegaKnightArt />
+          </div>
+        );
+      })}
+      {mkTargets.map((m) => {
+        const cells = megaSquares(m.to).map(place);
+        const col = Math.min(...cells.map((c) => c.col));
+        const row = Math.min(...cells.map((c) => c.row));
+        return <div key={`mt${m.to}`} className="pointer-events-none absolute z-[2] rounded-md border-4 border-dashed border-accent bg-accent/15" style={{ left: `${col * 12.5}%`, top: `${row * 12.5}%`, width: '25%', height: '25%' }} />;
+      })}
+
       {/* Pieces. Keyed by piece, so a moving piece slides to its new square. */}
       {pieces.map(({ p, s }) => {
         const { col, row } = place(s);
@@ -191,7 +232,8 @@ export function Board({ pos, orientation, canMove, lastMove, showLegal, showLast
               className={cx('h-full w-full', intro && 'animate-drop-in', promoted && 'animate-promote', down && (fallen.slow ? 'animate-topple-slow' : 'animate-topple'))}
               style={intro ? { animationDelay: `${(7 - row) * 70 + col * 12}ms` } : undefined}
             >
-              <PieceArt color={p.color} kind={p.kind} className="h-full w-full" />
+              <PieceArt color={p.color} kind={p.kind} className={cx('h-full w-full', p.status === 'devastated' && 'translate-y-[6%] rotate-[10deg] grayscale', p.status === 'bloodlust' && 'animate-bloodlust')} />
+              {p.status && <StatusBadge p={p} />}
             </div>
           </div>
         );
@@ -229,6 +271,36 @@ export function Board({ pos, orientation, canMove, lastMove, showLegal, showLast
         />
       )}
     </div>
+  );
+}
+
+/** Remorse: a small badge on a piece with a status. */
+function StatusBadge({ p }: { p: Piece }) {
+  const label = { devastated: `${p.due ?? ''}`, guilt: '', psycho: '', bloodlust: '' }[p.status!];
+  const tone = { devastated: 'bg-[#6d7c8c]', guilt: 'bg-[#3b6fb6]', psycho: 'bg-accent', bloodlust: 'bg-danger' }[p.status!];
+  const icon = { devastated: 'D', guilt: 'G', psycho: 'P', bloodlust: 'B' }[p.status!];
+  return (
+    <span className={cx('absolute right-[2%] top-[2%] flex h-[34%] min-w-[34%] items-center justify-center gap-[1px] rounded-full border-2 border-surface px-[3%] font-display text-[clamp(7px,1.6cqw,12px)] leading-none text-on-accent', tone)} title={p.status}>
+      <span aria-hidden>{icon}</span>
+      {label}
+      {(p.status === 'psycho' || p.status === 'bloodlust') && <span>{p.kills}</span>}
+    </span>
+  );
+}
+
+/** Mega Knight: the neutral mega knight, a knight drawn twice the size in red with a navy outline. */
+function MegaKnightArt() {
+  return (
+    <svg viewBox="0 0 100 100" className="h-full w-full drop-shadow-[0_8px_6px_rgb(0_38_87/0.35)]" aria-label="Mega knight">
+      <rect x="3" y="3" width="94" height="94" rx="10" fill="rgb(252 63 63 / 0.14)" stroke="var(--accent)" strokeWidth="2.5" strokeDasharray="6 5" />
+      <g transform="translate(6 4) scale(0.88)" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M22 89h56a3 3 0 0 0 3-3v-3a5 5 0 0 0-5-5H24a5 5 0 0 0-5 5v3a3 3 0 0 0 3 3z" fill="#fc3f3f" stroke="#002657" strokeWidth="3.4" />
+        <path d="M29 78c1-10 6-17 13-23-5 2-10 3-15 2-5-1-9-5-8-10 0-4 4-7 8-10 6-5 10-11 13-18l3-9 5 7 4-6 3 9c11 6 18 18 19 33 1 11-1 19-3 25z" fill="#fc3f3f" stroke="#002657" strokeWidth="3.4" />
+        <path d="M58 16c9 7 13 19 13 33M45 47c-2 4-2 7 0 9" fill="none" stroke="#faeeda" strokeWidth="2.4" />
+        <circle cx="41" cy="31" r="3.2" fill="#002657" />
+        <path d="M30 84h40" stroke="#faeeda" strokeWidth="2.4" />
+      </g>
+    </svg>
   );
 }
 

@@ -93,7 +93,7 @@ export function findKing(pos: Position, color: Color): number {
 }
 
 /** Is square `target` attacked by any piece of color `by`? */
-export function isAttacked(board: (Piece | null)[], target: number, by: Color, hole: number | null = null): boolean {
+export function isAttacked(board: (Piece | null)[], target: number, by: Color, hole: Block = null): boolean {
   const tf = fileOf(target);
   const tr = rankOf(target);
   // Pawns: a white pawn attacks up the board, so look one rank down from the target.
@@ -102,7 +102,7 @@ export function isAttacked(board: (Piece | null)[], target: number, by: Color, h
     const f = tf + df;
     if (onBoard(f, pr)) {
       const p = board[sq(f, pr)];
-      if (p && p.color === by && p.kind === 'P') return true;
+      if (p && p.color === by && p.kind === 'P' && givesCheck(p)) return true;
     }
   }
   for (const [df, dr] of KNIGHT_STEPS) {
@@ -110,7 +110,7 @@ export function isAttacked(board: (Piece | null)[], target: number, by: Color, h
     const r = tr + dr;
     if (onBoard(f, r)) {
       const p = board[sq(f, r)];
-      if (p && p.color === by && p.kind === 'N') return true;
+      if (p && p.color === by && p.kind === 'N' && givesCheck(p)) return true;
     }
   }
   for (const [df, dr] of KING_STEPS) {
@@ -118,7 +118,7 @@ export function isAttacked(board: (Piece | null)[], target: number, by: Color, h
     const r = tr + dr;
     if (onBoard(f, r)) {
       const p = board[sq(f, r)];
-      if (p && p.color === by && p.kind === 'K') return true;
+      if (p && p.color === by && p.kind === 'K' && givesCheck(p)) return true;
     }
   }
   if (slides(board, tf, tr, ROOK_DIRS, by, 'R', hole)) return true;
@@ -126,16 +126,16 @@ export function isAttacked(board: (Piece | null)[], target: number, by: Color, h
   return false;
 }
 
-function slides(board: (Piece | null)[], tf: number, tr: number, dirs: readonly (readonly [number, number])[], by: Color, kind: 'R' | 'B', hole: number | null) {
+function slides(board: (Piece | null)[], tf: number, tr: number, dirs: readonly (readonly [number, number])[], by: Color, kind: 'R' | 'B', hole: Block) {
   for (const [df, dr] of dirs) {
     let f = tf + df;
     let r = tr + dr;
     while (onBoard(f, r)) {
-      // Pot-Hole: nothing but a knight passes over an open pothole, so it blocks a line.
-      if (sq(f, r) === hole) break;
+      // Pot-Hole's pothole and Mega Knight's mega knights block lines (only knights jump them).
+      if (hole?.has(sq(f, r))) break;
       const p = board[sq(f, r)];
       if (p) {
-        if (p.color === by && (p.kind === kind || p.kind === 'Q')) return true;
+        if (p.color === by && (p.kind === kind || p.kind === 'Q') && givesCheck(p)) return true;
         break;
       }
       f += df;
@@ -146,7 +146,7 @@ function slides(board: (Piece | null)[], tf: number, tr: number, dirs: readonly 
 }
 
 /** Does the piece on `from` attack `target`? */
-export function attacks(board: (Piece | null)[], from: number, target: number, hole: number | null = null): boolean {
+export function attacks(board: (Piece | null)[], from: number, target: number, hole: Block = null): boolean {
   const p = board[from];
   if (!p || from === target) return false;
   const df = fileOf(target) - fileOf(from);
@@ -167,7 +167,7 @@ export function attacks(board: (Piece | null)[], from: number, target: number, h
       let f = fileOf(from) + sf;
       let r = rankOf(from) + sr;
       while (f !== fileOf(target) || r !== rankOf(target)) {
-        if (board[sq(f, r)] || sq(f, r) === hole) return false;
+        if (board[sq(f, r)] || hole?.has(sq(f, r))) return false;
         f += sf;
         r += sr;
       }
@@ -189,7 +189,20 @@ export function checkers(pos: Position): number[] {
 }
 
 /** The open pothole's square (Pot-Hole), or null. */
-export const holeOf = (pos: Position) => pos.hole?.sq ?? null;
+export const holeOf = (pos: Position): Block => blockedOf(pos);
+
+/** Squares no ordinary piece may enter or pass over: the pothole and every mega knight's four squares. */
+export type Block = Set<number> | null;
+export function blockedOf(pos: Position): Block {
+  if (!pos.hole && !pos.mk?.length) return null;
+  const b = new Set<number>();
+  if (pos.hole) b.add(pos.hole.sq);
+  for (const a of pos.mk ?? []) for (const d of [0, 1, 8, 9]) b.add(a + d);
+  return b;
+}
+
+/** Remorse: devastated and guilt-ridden pieces do not give check (Caleb). */
+export const givesCheck = (p: Piece) => p.status !== 'devastated' && p.status !== 'guilt';
 
 /** Do kings count as royal (check, checkmate)? Not in Bastille Chess. */
 export const royal = (pos: Position) => pos.variant !== 'bastille';
@@ -209,10 +222,13 @@ function pseudoMoves(pos: Position): MoveInfo[] {
   // A pothole can expose a king to attack on the other player's turn; it still cannot be taken.
   const kingSafe = royal(pos);
   const add = (from: number, to: number, extra: Partial<MoveInfo> = {}) => {
-    if (to === hole) return;
+    if (hole?.has(to)) return;
     const piece = board[from]!;
     const captured = extra.enPassant ? board[extra.captureSq!] : board[to];
-    if (kingSafe && captured?.kind === 'K') return;
+    if (kingSafe && captured?.kind === 'K' && captured.color !== turn) return;
+    // Remorse: a guilt-ridden piece cannot capture; a bloodlust piece can only move to capture.
+    if (piece.status === 'guilt' && captured) return;
+    if (piece.status === 'bloodlust' && !captured) return;
     out.push({
       from,
       to,
@@ -226,9 +242,14 @@ function pseudoMoves(pos: Position): MoveInfo[] {
     });
   };
 
+  // Remorse: a bloodlust piece can capture friendly pieces too.
+  const takes = (p: Piece, t: Piece) => t.color !== turn || p.status === 'bloodlust';
   for (let from = 0; from < 64; from++) {
     const p = board[from];
     if (!p || p.color !== turn) continue;
+    // Remorse: a devastated piece cannot act; during a psychopath's extra move only that piece moves.
+    if (p.status === 'devastated') continue;
+    if (pos.extra !== undefined && pos.extra !== null && from !== pos.extra) continue;
     const f0 = fileOf(from);
     const r0 = rankOf(from);
 
@@ -241,7 +262,7 @@ function pseudoMoves(pos: Position): MoveInfo[] {
         if (rankOf(to) === lastRank) for (const promo of PROMO_KINDS) add(from, to, { ...extra, promo });
         else add(from, to, extra);
       };
-      if (onBoard(f0, r1) && !board[sq(f0, r1)] && sq(f0, r1) !== hole) {
+      if (onBoard(f0, r1) && !board[sq(f0, r1)] && !hole?.has(sq(f0, r1))) {
         pushPawn(sq(f0, r1));
         const r2 = r0 + 2 * dir;
         if (r0 === startRank && !board[sq(f0, r2)]) add(from, sq(f0, r2), { double: true });
@@ -251,7 +272,7 @@ function pseudoMoves(pos: Position): MoveInfo[] {
         if (!onBoard(f, r1)) continue;
         const to = sq(f, r1);
         const target = board[to];
-        if (target && target.color !== turn) pushPawn(to);
+        if (target && takes(p, target)) pushPawn(to);
         else if (!target && pos.ep === to) {
           const capSq = sq(f, r0);
           const victim = board[capSq];
@@ -268,7 +289,7 @@ function pseudoMoves(pos: Position): MoveInfo[] {
         if (!onBoard(f, r)) continue;
         const to = sq(f, r);
         const target = board[to];
-        if (!target || target.color !== turn) add(from, to);
+        if (!target || takes(p, target)) add(from, to);
       }
       if (p.kind === 'K') castleMoves(pos, from, add);
       continue;
@@ -280,10 +301,10 @@ function pseudoMoves(pos: Position): MoveInfo[] {
       let r = r0 + dr;
       while (onBoard(f, r)) {
         const to = sq(f, r);
-        if (to === hole) break;
+        if (hole?.has(to)) break;
         const target = board[to];
         if (target) {
-          if (target.color !== turn) add(from, to);
+          if (takes(p, target)) add(from, to);
           break;
         }
         add(from, to);
@@ -313,7 +334,7 @@ function castleMoves(pos: Position, from: number, add: (from: number, to: number
   const att = (s: number) => isAttacked(pos.board, s, enemy, hole);
   if (att(from)) return;
   const r = rankOf(from);
-  const clear = (...files: number[]) => files.every((f) => !pos.board[sq(f, r)] && sq(f, r) !== hole);
+  const clear = (...files: number[]) => files.every((f) => !pos.board[sq(f, r)] && !hole?.has(sq(f, r)));
   const rookOk = (s: number) => {
     const p = pos.board[s];
     return !!p && p.kind === 'R' && p.color === c;
@@ -333,6 +354,8 @@ function castleMoves(pos: Position, from: number, add: (from: number, to: number
 /** Every legal move for the side to move. */
 export function legalMoves(pos: Position): MoveInfo[] {
   const mover = pos.turn;
+  // Mega Knight: after rolling a 6, the turn's move is a mega knight move.
+  if (pos.mkRoll) return megaMoves(pos).filter((m) => !inCheck(play(pos, m), mover));
   // Bastille: no royal pieces, so no check: every move that follows the pieces' rules is legal.
   if (!royal(pos)) return pseudoMoves(pos);
   return pseudoMoves(pos).filter((m) => !inCheck(play(pos, m), mover));
@@ -340,6 +363,7 @@ export function legalMoves(pos: Position): MoveInfo[] {
 
 /** Makes a move that is already known to be legal. Returns a new position. */
 export function play(pos: Position, m: MoveInfo): Position {
+  if (m.mk) return playMega(pos, m);
   const board = pos.board.slice();
   const c = pos.turn;
   const castling = { w: { ...pos.castling.w }, b: { ...pos.castling.b } };
@@ -348,7 +372,8 @@ export function play(pos: Position, m: MoveInfo): Position {
   if (m.captureSq !== null) board[m.captureSq] = null;
   let moving = board[m.from]!;
   board[m.from] = null;
-  if (m.promo) moving = { id: nextId++, color: c, kind: m.promo };
+  // Remorse: a promoted pawn keeps its status (Claude Code's reading).
+  if (m.promo) moving = { ...moving, id: nextId++, kind: m.promo };
   board[m.to] = moving;
 
   if (m.castle) {
@@ -376,7 +401,78 @@ export function play(pos: Position, m: MoveInfo): Position {
     nextId,
     variant: pos.variant,
     hole: pos.hole ?? null,
+    mk: pos.mk,
+    mkRoll: false,
+    extra: null,
   };
+}
+
+// ---------------------------------------------------------------- Mega Knight's mega knights
+
+/** Knight jumps for a mega knight's lower-left corner (it moves like a knight along the grid's corners). */
+const MK_STEPS = KNIGHT_STEPS;
+
+/** The four squares a mega knight with lower-left square `a` covers. */
+export const megaSquares = (a: number) => [a, a + 1, a + 8, a + 9];
+
+/**
+ * Every mega knight move. The 2x2 must stay on the board. Landing exactly on
+ * another mega knight captures it; landing partly over one is not allowed
+ * (Caleb). Every piece under the new squares is crushed, kings included.
+ */
+export function megaMoves(pos: Position): MoveInfo[] {
+  const out: MoveInfo[] = [];
+  const all = pos.mk ?? [];
+  for (const a of all) {
+    for (const [df, dr] of MK_STEPS) {
+      const f = fileOf(a) + df;
+      const r = rankOf(a) + dr;
+      if (f < 0 || f > 6 || r < 0 || r > 6) continue;
+      const to = sq(f, r);
+      const partly = all.some((o) => o !== a && o !== to && Math.abs(fileOf(o) - f) <= 1 && Math.abs(rankOf(o) - r) <= 1);
+      if (partly) continue;
+      const crushedSq = megaSquares(to).filter((s) => !!pos.board[s]);
+      const crushed = crushedSq.map((s) => pos.board[s]!);
+      out.push({ from: a, to, mk: true, piece: { id: -1, color: pos.turn, kind: 'N' }, captured: crushed[0] ?? null, captureSq: null, castle: null, enPassant: false, double: false, crushed, crushedSq });
+    }
+  }
+  return out;
+}
+
+function playMega(pos: Position, m: MoveInfo): Position {
+  const board = pos.board.slice();
+  for (const s of megaSquares(m.to)) board[s] = null;
+  const mk = (pos.mk ?? []).filter((a) => a !== m.from && a !== m.to);
+  mk.push(m.to);
+  const c = pos.turn;
+  return {
+    ...pos,
+    board,
+    mk,
+    mkRoll: false,
+    turn: other(c),
+    ep: null,
+    // A crush counts as a capture for the fifty-move rule (Claude Code's reading).
+    halfmove: m.crushed?.length ? 0 : pos.halfmove + 1,
+    fullmove: c === 'b' ? pos.fullmove + 1 : pos.fullmove,
+  };
+}
+
+/** Four knights of any colors in a 2x2 become a mega knight there (Caleb). Returns the new mega knights' squares. */
+export function formMegaKnights(pos: Position): { pos: Position; formed: number[] } {
+  const formed: number[] = [];
+  let board = pos.board;
+  for (let f = 0; f < 7; f++)
+    for (let r = 0; r < 7; r++) {
+      const a = sq(f, r);
+      if (megaSquares(a).every((s) => board[s]?.kind === 'N')) {
+        board = board.slice();
+        for (const s of megaSquares(a)) board[s] = null;
+        formed.push(a);
+      }
+    }
+  if (!formed.length) return { pos, formed };
+  return { pos: { ...pos, board, mk: [...(pos.mk ?? []), ...formed] }, formed };
 }
 
 /** Finds the legal move matching what a player asked for, or null if it is not legal. */

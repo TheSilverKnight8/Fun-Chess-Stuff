@@ -3,7 +3,9 @@ import { findKing } from '../chess/standard';
 import { other, type Color, type Piece } from '../chess/types';
 import { PIECE_VALUE } from '../lib/audio/sfx';
 import { CREAM, INK, drawPiece } from '../board/pieceShapes';
-import { ROLL, SLIDE_MS, onFx, openAt, type FxEvent } from './fx';
+import { MK_LAND, ROLL, SLIDE_MS, onFx, openAt, type FxEvent } from './fx';
+import { megaSquares } from '../chess/standard';
+import type { RemorseEvent } from '../chess/remorse';
 import type { Roll } from '../chess/pothole';
 
 // Standard Chess's effects (Caleb approved all of them in Stage 2), drawn on two
@@ -168,9 +170,37 @@ function handle(e: FxEvent, add: Add, kick: Kick) {
     dice(add, kick, g, e.roll);
     return;
   }
+  if (e.t === 'mkroll') {
+    megaRoll(add, kick, g, e.d6);
+    return;
+  }
+  if (e.t === 'formed') {
+    for (const a of e.anchors) formation(add, g, a);
+    kick(10, SLIDE_MS + 500);
+    banner(add, 'Mega knight', SLIDE_MS + 450, 1500);
+    return;
+  }
+  if (e.t === 'remorse') {
+    remorseFx(add, kick, g, e.ev);
+    return;
+  }
   if (e.t === 'move') {
     const { m } = e;
     const to = g.center(m.to);
+    if (m.mk) {
+      // The mega knight leaps (the board slides it over half a second); on landing, dust, a heavy shake, and whatever was under it shatters.
+      const c = { x: (g.center(m.to).x + g.center(m.to + 9).x) / 2, y: (g.center(m.to).y + g.center(m.to + 9).y) / 2 };
+      const f = { x: (g.center(m.from).x + g.center(m.from + 9).x) / 2, y: (g.center(m.from).y + g.center(m.from + 9).y) / 2 };
+      leapShadow(add, g, f, c);
+      (m.crushed ?? []).forEach((p, i) => {
+        const at = g.center(m.crushedSq?.[i] ?? m.to);
+        shatter(add, p, at.x, at.y, g.sq, MK_LAND);
+      });
+      dust(add, c.x, c.y, g.sq * 2.2, MK_LAND);
+      kick(m.crushed?.length ? 24 : 14, MK_LAND);
+      return;
+    }
+    if (e.extraMove) streaks(add, g, m.from, m.to, true);
     if (m.castle) {
       // King and rook slide together with speed streaks.
       const r = m.from >> 3;
@@ -205,6 +235,12 @@ function handle(e: FxEvent, add: Add, kick: Kick) {
   // The end of the game.
   const { result, pos } = e;
   const delay = (e.afterMove ? SLIDE_MS + 260 : 0) + e.extraDelay;
+  if (result.reason === 'kingLost') {
+    const mega = pos.variant === 'megaknight';
+    kick(20, delay + (mega ? MK_LAND : 0));
+    banner(add, mega ? 'Crushed' : 'King lost', delay + (mega ? MK_LAND + 150 : 300), 1900);
+    return;
+  }
   if (result.reason === 'palace' || result.reason === 'palaceBoth') {
     // Bastille: the emptied palace's walls crumble.
     const fallen: Color[] = result.winner ? [other(result.winner)] : ['w', 'b'];
@@ -233,6 +269,186 @@ const DRAW_BANNER: Record<string, string> = {
 };
 
 // ---------------------------------------------------------------- the effects
+
+/** Mega Knight: the leap's shadow on the board, shrinking at the top of the arc. */
+function leapShadow(add: Add, g: Geom, f: { x: number; y: number }, t: { x: number; y: number }) {
+  add({
+    layer: 'front',
+    life: MK_LAND,
+    draw(ctx, _age, k) {
+      const x = f.x + (t.x - f.x) * k;
+      const y = f.y + (t.y - f.y) * k;
+      const s = 1 - Math.sin(k * Math.PI) * 0.45;
+      ctx.fillStyle = 'rgb(0 38 87 / 0.25)';
+      ctx.beginPath();
+      ctx.ellipse(x, y + g.sq * 0.7, g.sq * 0.95 * s, g.sq * 0.3 * s, 0, 0, Math.PI * 2);
+      ctx.fill();
+    },
+  });
+}
+
+/** A ring of dust thrown out from a heavy landing. */
+function dust(add: Add, cx: number, cy: number, size: number, delay: number) {
+  const puffs = Array.from({ length: 14 }, (_, i) => ({ a: (i / 14) * Math.PI * 2 + rand(-0.2, 0.2), d: rand(0.6, 1.1), r: rand(0.1, 0.2) }));
+  add({
+    layer: 'front',
+    delay,
+    life: 800,
+    draw(ctx, _age, k) {
+      ctx.globalAlpha = fadeOut(k, 0.3) * 0.8;
+      ctx.fillStyle = '#b9a98f';
+      for (const p of puffs) {
+        const d = size * 0.5 * (0.6 + p.d * easeOut(k));
+        ctx.beginPath();
+        ctx.arc(cx + Math.cos(p.a) * d, cy + Math.sin(p.a) * d * 0.6, size * p.r * (0.6 + k), 0, Math.PI * 2);
+        ctx.fill();
+      }
+    },
+  });
+}
+
+/** Mega Knight: a die tumbles in; a 6 flashes red with a shake. */
+function megaRoll(add: Add, kick: Kick, g: Geom, d6: number) {
+  const mid = { x: g.x + g.size / 2, y: g.y + g.size / 2 };
+  const from = { x: g.x - g.sq, y: g.y + g.size * 0.8 };
+  const size = g.sq * 1.2;
+  add({
+    layer: 'front',
+    life: 1300,
+    draw(ctx, age, k) {
+      const p = Math.min(1, age / 450);
+      const e = easeOut(p);
+      const x = from.x + (mid.x - from.x) * e;
+      const y = from.y + (mid.y - from.y) * e - Math.abs(Math.sin(p * Math.PI * 3)) * (1 - p) * g.sq;
+      ctx.globalAlpha = p < 1 ? 1 : fadeOut(k, 0.65);
+      if (p >= 1 && d6 === 6) {
+        ctx.fillStyle = 'rgb(252 63 63 / 0.25)';
+        ctx.beginPath();
+        ctx.arc(mid.x, mid.y, size * (1 + (age - 450) / 300), 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.translate(x, y);
+      ctx.rotate((1 - e) * Math.PI * 4);
+      dieFace(ctx, size, p < 1 ? 1 + (Math.floor(age / 60) % 6) : d6, p >= 1 && d6 === 6);
+    },
+  });
+  if (d6 === 6) {
+    kick(10, 450);
+    spark(add, mid.x, mid.y, size * 1.8, 450, RED);
+  }
+}
+
+/** Mega Knight: four knights spiral together into one. */
+function formation(add: Add, g: Geom, a: number) {
+  const sqs = megaSquares(a);
+  const pts = sqs.map((s) => g.center(s));
+  const c = { x: (pts[0].x + pts[3].x) / 2, y: (pts[0].y + pts[3].y) / 2 };
+  const dpr = window.devicePixelRatio || 1;
+  const img = document.createElement('canvas');
+  img.width = img.height = Math.ceil(g.sq * dpr);
+  const ictx = img.getContext('2d');
+  if (!ictx) return;
+  ictx.scale(dpr, dpr);
+  drawPiece(ictx, 'w', 'N', 0, 0, g.sq);
+  add({
+    layer: 'front',
+    life: SLIDE_MS + 500,
+    draw(ctx, age) {
+      const k = Math.max(0, (age - SLIDE_MS) / 500);
+      pts.forEach((p, i) => {
+        const a0 = Math.atan2(p.y - c.y, p.x - c.x) + k * Math.PI * 2.5;
+        const r = Math.hypot(p.x - c.x, p.y - c.y) * (1 - easeOut(k));
+        ctx.save();
+        ctx.globalAlpha = 1 - k * 0.5;
+        ctx.translate(c.x + Math.cos(a0) * r, c.y + Math.sin(a0) * r);
+        ctx.rotate(k * 8 + i);
+        const s = g.sq * (1 - k * 0.5);
+        ctx.drawImage(img, -s / 2, -s / 2, s, s);
+        ctx.restore();
+      });
+    },
+  });
+  spark(add, c.x, c.y, g.sq * 2.6, SLIDE_MS + 500, RED);
+  burst(add, c.x, c.y, g.sq, SLIDE_MS + 500);
+}
+
+const STATUS_WORD: Record<string, string> = { devastated: 'Devastated', guilt: 'Guilt-ridden', psycho: 'Psychopath!', bloodlust: 'Bloodlust!' };
+
+/** Remorse: the capture roll over the capturing piece, its status word, absolving halos, and self-captures. */
+function remorseFx(add: Add, kick: Kick, g: Geom, ev: RemorseEvent) {
+  if (ev.sq !== null) {
+    const c = g.center(ev.sq);
+    const word = ev.d6 === null ? (ev.bloodlust ? STATUS_WORD.bloodlust : null) : ev.status ? STATUS_WORD[ev.status] : 'Unaffected';
+    if (ev.d6 !== null) {
+      const d6 = ev.d6;
+      add({
+        layer: 'front',
+        delay: SLIDE_MS + 150,
+        life: 900,
+        draw(ctx, age, k) {
+          const p = Math.min(1, age / 420);
+          ctx.globalAlpha = fadeOut(k, 0.7);
+          ctx.translate(c.x, c.y - g.sq * (0.9 + 0.5 * easeOut(p)));
+          ctx.rotate((1 - easeOut(p)) * Math.PI * 3);
+          dieFace(ctx, g.sq * 0.75, p < 1 ? 1 + (Math.floor(age / 60) % 6) : d6, false);
+        },
+      });
+    }
+    if (word) {
+      const color = ev.status === 'guilt' ? '#3b6fb6' : ev.status === 'devastated' ? '#6d7c8c' : ev.status ? RED : INK;
+      add({
+        layer: 'front',
+        delay: SLIDE_MS + (ev.d6 === null ? 200 : 600),
+        life: 1300,
+        draw(ctx, _age, k) {
+          ctx.globalAlpha = fadeOut(k, 0.6);
+          const y = c.y - g.sq * (1.3 + 0.6 * easeOut(k));
+          ctx.font = `400 ${Math.round(g.sq * 0.42)}px Norwester, sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          const w = ctx.measureText(word.toUpperCase()).width + g.sq * 0.4;
+          ctx.fillStyle = color;
+          ctx.fillRect(c.x - w / 2, y - g.sq * 0.3, w, g.sq * 0.6);
+          ctx.fillStyle = SURFACE;
+          ctx.fillText(word.toUpperCase(), c.x, y + 1);
+        },
+      });
+      if (ev.status === 'psycho' || ev.status === 'bloodlust') {
+        spark(add, c.x, c.y, g.sq * 1.6, SLIDE_MS + 600, RED);
+        kick(ev.status === 'bloodlust' ? 14 : 7, SLIDE_MS + 600);
+      }
+    }
+  }
+  // Absolving: a halo spreads from the bishop, with light reaching each absolved piece.
+  if (ev.absolved.length) {
+    const bishop = ev.absolved.map((s) => g.center(s));
+    add({
+      layer: 'front',
+      delay: SLIDE_MS,
+      life: 900,
+      draw(ctx, _age, k) {
+        ctx.globalAlpha = fadeOut(k, 0.5);
+        for (const p of bishop) {
+          ctx.strokeStyle = '#f2c94c';
+          ctx.lineWidth = g.sq * 0.06;
+          ctx.beginPath();
+          ctx.ellipse(p.x, p.y - g.sq * 0.42, g.sq * 0.3, g.sq * 0.1, 0, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.fillStyle = 'rgb(255 248 238 / 0.55)';
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, g.sq * (0.3 + 0.4 * easeOut(k)), 0, Math.PI * 2);
+          ctx.fill();
+        }
+      },
+    });
+  }
+  // A devastated piece captures itself: it sinks, greys and breaks.
+  for (const sc of ev.selfCaptured) {
+    const c = g.center(sc.sq);
+    shatter(add, sc.piece, c.x, c.y, g.sq, 700);
+    kick(6, 700);
+  }
+}
 
 /** Bastille: a palace's crenellated walls break into bricks that fly and fall. */
 function crumble(add: Add, g: Geom, color: Color, delay: number) {
@@ -664,8 +880,8 @@ function ring(add: Add, g: Geom, s: number, delay: number) {
   });
 }
 
-/** Speed lines along a slide. */
-function streaks(add: Add, g: Geom, from: number, to: number) {
+/** Speed lines along a slide (all red for a psychopath's extra move: its afterimage). */
+function streaks(add: Add, g: Geom, from: number, to: number, red = false) {
   const a = g.center(from);
   const b = g.center(to);
   const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
@@ -679,7 +895,7 @@ function streaks(add: Add, g: Geom, from: number, to: number) {
       ctx.lineCap = 'round';
       [-0.28, 0, 0.28].forEach((o, i) => {
         ctx.globalAlpha = (1 - k) * (i === 1 ? 0.9 : 0.6);
-        ctx.strokeStyle = i === 1 ? RED : INK;
+        ctx.strokeStyle = i === 1 || red ? RED : INK;
         ctx.lineWidth = g.sq * (i === 1 ? 0.07 : 0.04);
         const ox = nx * o * g.sq;
         const oy = ny * o * g.sq;

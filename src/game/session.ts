@@ -21,6 +21,8 @@ import {
   offerDraw,
   plyOf,
   resign,
+  rollIn,
+  skipIn,
   viewOf,
   type GameView,
   type MatchState,
@@ -292,6 +294,8 @@ function fromGuest(msg: RoomMessage) {
     const used = typeof msg.used === 'number' && msg.used >= 0 ? msg.used : null;
     next = moveIn(match, guest, msg.move, used ?? Infinity, t, dice);
   } else if (msg.t === 'resign') next = resign(match, guest, t);
+  else if (msg.t === 'roll') next = rollIn(match, guest, typeof msg.used === 'number' ? msg.used : Infinity, t, dice);
+  else if (msg.t === 'skip') next = skipIn(match, guest, typeof msg.used === 'number' ? msg.used : Infinity, t);
   else if (msg.t === 'draw') {
     if (msg.a === 'offer') next = offerDraw(match, guest);
     else next = answerDraw(match, guest, msg.a === 'accept', t);
@@ -303,7 +307,7 @@ function fromGuest(msg: RoomMessage) {
 
 function isMove(m: unknown): m is Move {
   const v = m as Move;
-  return !!v && Number.isInteger(v.from) && Number.isInteger(v.to) && v.from >= 0 && v.from < 64 && v.to >= 0 && v.to < 64 && (v.promo === undefined || ['Q', 'R', 'B', 'N'].includes(v.promo));
+  return !!v && Number.isInteger(v.from) && Number.isInteger(v.to) && v.from >= 0 && v.from < 64 && v.to >= 0 && v.to < 64 && (v.promo === undefined || ['Q', 'R', 'B', 'N'].includes(v.promo)) && (v.mk === undefined || typeof v.mk === 'boolean');
 }
 
 /** Sends the current picture to the guest and shows it here. */
@@ -441,10 +445,24 @@ export function playerMove(move: Move) {
   const m = findLegal(s.game.pos, move);
   if (!m || !room) return;
   const t = now();
-  room.send({ t: 'move', move: { from: move.from, to: move.to, promo: move.promo }, used: Math.round(t - turnStart.at) });
+  room.send({ t: 'move', move: { from: move.from, to: move.to, promo: move.promo, mk: move.mk }, used: Math.round(t - turnStart.at) });
   const g = s.game;
   const clock = g.clock ? { ...g.clock, [s.myColor]: g.clock[s.myColor] - (t - s.gameAt), running: other(s.myColor) } : null;
   patch({ game: { ...g, pos: play(g.pos, m), lastMove: m, clock, drawOffer: g.drawOffer === s.myColor ? g.drawOffer : null }, gameAt: t });
+}
+
+/** Mega Knight: roll the die instead of moving a piece. Remorse: pass on the extra move. Both are decided by the host. */
+export function playerAction(a: 'roll' | 'skip') {
+  const s = roomStore.get();
+  if (!s.game || s.game.result || !s.myColor || s.game.pos.turn !== s.myColor) return;
+  if (s.role === 'host') {
+    if (!match) return;
+    const next = a === 'roll' ? rollIn(match, match.hostColor, null, now(), dice) : skipIn(match, match.hostColor, null, now());
+    if (next) {
+      match = next;
+      publish();
+    }
+  } else room?.send({ t: a, used: Math.round(now() - turnStart.at) });
 }
 
 export function playerResign() {

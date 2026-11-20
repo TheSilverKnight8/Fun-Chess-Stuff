@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
-import { BookOpen, Check, Flag, Handshake, Loader2, LogOut, Play, RefreshCw, Swords, UserRound, WifiOff } from 'lucide-react';
+import { BookOpen, Check, Dices, Flag, Zap, Handshake, Loader2, LogOut, Play, RefreshCw, Swords, UserRound, WifiOff } from 'lucide-react';
 import { Board } from '../board/Board';
 import { useGameManual } from '../guide/Guide';
 import { EffectsLayer } from '../effects/EffectsLayer';
@@ -21,6 +21,7 @@ import {
   clearNotice,
   gameInProgress,
   leaveRoom,
+  playerAction,
   playerDraw,
   playerMove,
   playerResign,
@@ -479,8 +480,33 @@ function Actions({ s, game, me, onLeave, onGuide }: { s: RoomScreen; game: GameV
     if (await confirmDialog({ title: 'Resign?', body: 'Your opponent wins the game.', confirm: 'Resign', danger: true })) playerResign();
   };
   const theyOffer = game.drawOffer === other(me);
+  const myTurn = game.pos.turn === me && live;
+  const variant = game.pos.variant;
+  const extra = variant === 'remorse' && game.pos.extra !== null && game.pos.extra !== undefined;
   return (
     <div className="grid gap-2">
+      {/* Mega Knight: instead of moving a piece, roll; on a 6, move a mega knight. */}
+      {variant === 'megaknight' && myTurn && (
+        <div className="flex animate-rise items-center gap-2 rounded-xl border-2 border-accent/50 bg-surface px-3 py-2">
+          <Dices className="size-5 text-accent" />
+          <span className="flex-1 text-sm">{game.pos.mkRoll ? 'You rolled a 6: move a mega knight.' : 'Move a piece, or roll: a 6 moves a mega knight.'}</span>
+          {!game.pos.mkRoll && (
+            <Button size="sm" variant="primary" press onClick={() => playerAction('roll')}>
+              Roll
+            </Button>
+          )}
+        </div>
+      )}
+      {/* Remorse: a psychopath's extra move. */}
+      {extra && myTurn && (
+        <div className="flex animate-rise items-center gap-2 rounded-xl border-2 border-accent/50 bg-surface px-3 py-2">
+          <Zap className="size-5 text-accent" />
+          <span className="flex-1 text-sm">Psychopath: an extra move with the same piece.</span>
+          <Button size="sm" press onClick={() => playerAction('skip')}>
+            Skip
+          </Button>
+        </div>
+      )}
       {theyOffer && (
         <div className="flex animate-rise flex-wrap items-center gap-2 rounded-xl border-2 border-accent/50 bg-surface px-3 py-2">
           <Handshake className="size-5 text-accent" />
@@ -494,18 +520,18 @@ function Actions({ s, game, me, onLeave, onGuide }: { s: RoomScreen; game: GameV
         </div>
       )}
       <div className="flex gap-2">
-        <Button size="md" press className="flex-1" disabled={!live || !!game.drawOffer} onClick={() => playerDraw('offer')}>
+        <Button size="md" press className="min-w-0 flex-1 px-2" disabled={!live || !!game.drawOffer} onClick={() => playerDraw('offer')}>
           <Handshake className="size-4" />
           {game.drawOffer === me ? 'Draw offered' : 'Offer draw'}
         </Button>
-        <Button size="md" variant="danger" press className="flex-1" disabled={!live} onClick={() => void resign()}>
+        <Button size="md" variant="danger" press className="min-w-0 flex-1 px-2" disabled={!live} onClick={() => void resign()}>
           <Flag className="size-4" />
           Resign
         </Button>
-        <Button size="md" variant="ghost" press className="border-2 border-navy" onClick={onGuide} title="Manual" aria-label="Open the manual">
+        <Button size="md" variant="ghost" press className="border-2 border-navy px-3" onClick={onGuide} title="Manual" aria-label="Open the manual">
           <BookOpen className="size-4" />
         </Button>
-        <Button size="md" variant="ghost" press className="border-2 border-navy" onClick={onLeave} title="Leave the room">
+        <Button size="md" variant="ghost" press className="border-2 border-navy px-3" onClick={onLeave} title="Leave the room">
           <LogOut className="size-4" />
         </Button>
       </div>
@@ -518,7 +544,7 @@ function resultTitle(r: Result, me: Color) {
   return r.winner === me ? 'You win' : 'You lose';
 }
 
-function resultLine(r: Result, me: Color) {
+function resultLine(r: Result, me: Color, game: GameView) {
   const loser = r.winner ? other(r.winner) : null;
   const who = loser === me ? 'You' : 'Your opponent';
   switch (r.reason) {
@@ -538,6 +564,8 @@ function resultLine(r: Result, me: Color) {
       return loser === me ? 'Your palace is empty.' : 'Your opponent’s palace is empty.';
     case 'palaceBoth':
       return 'One move emptied both palaces.';
+    case 'kingLost':
+      return `${loser === me ? 'Your' : 'Your opponent’s'} king is gone${game.mode === 'megaknight' ? ': crushed by a mega knight' : ''}.`;
     default:
       return `${RESULT_TEXT[r.reason]}.`;
   }
@@ -551,7 +579,7 @@ function ResultPanel({ s, game, me, onLeave, onGuide }: { s: RoomScreen; game: G
     <div className={cx('animate-pop rounded-xl border-2 bg-surface px-4 py-3', r.winner === me ? 'border-accent' : 'border-navy')}>
       <div className="flex items-baseline gap-3">
         <h2 className={cx('text-3xl', r.winner === me && 'text-accent')}>{resultTitle(r, me)}</h2>
-        <p className="min-w-0 flex-1 text-sm text-muted">{resultLine(r, me)}</p>
+        <p className="min-w-0 flex-1 text-sm text-muted">{resultLine(r, me, game)}</p>
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
         {host && open && (
