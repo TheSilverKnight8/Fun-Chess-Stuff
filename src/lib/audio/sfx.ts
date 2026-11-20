@@ -212,6 +212,20 @@ export const sfx = {
   crown() {
     notes([88, 91, 96], { type: 'triangle', step: 0.05, dur: 0.25, gain: 0.1 });
   },
+  /** Manual: a page turning (a paper swish). */
+  pageTurn() {
+    noise({ filter: 'bandpass', hz: 1800, toHz: 4500, q: 0.8, dur: 0.28, gain: 0.22 });
+    noise({ at: 0.22, filter: 'highpass', hz: 3000, dur: 0.06, gain: 0.12 });
+  },
+  /** Manual: the book drops in and lands. */
+  bookOpen() {
+    noise({ filter: 'bandpass', hz: 900, toHz: 2400, dur: 0.3, gain: 0.15 });
+    clack(0.42, 0.7, 0.8);
+  },
+  /** Manual: the book lifts away. */
+  bookClose() {
+    noise({ filter: 'bandpass', hz: 2400, toHz: 800, dur: 0.3, gain: 0.15 });
+  },
   /** The opponent offers a draw. */
   offer() {
     notes([76, 81], { type: 'triangle', step: 0.12, dur: 0.25, gain: 0.15 });

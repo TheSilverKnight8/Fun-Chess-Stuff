@@ -53,6 +53,10 @@
   --animate-check-pulse: check-pulse 0.7s ease-in-out infinite alternate;
   --animate-clock-low: clock-low 0.5s ease-in-out infinite alternate;
   --animate-clock-crack: clock-crack 0.6s ease-out both;
+
+  /* The manual flipbook (Stage 5). */
+  --animate-book-drop: book-drop 0.52s cubic-bezier(0.25, 1.35, 0.45, 1) both;
+  --animate-book-lift: book-lift 0.42s cubic-bezier(0.5, 0, 0.75, 0) both;
 }
 
 @keyframes rise {
@@ -160,6 +164,42 @@
   100% {
     background-color: var(--danger);
     transform: none;
+  }
+}
+
+/* The flipbook drops in from above the screen with a little bounce, and lifts away. */
+@keyframes book-drop {
+  from {
+    transform: translateY(-115%) rotate(-2deg);
+  }
+  to {
+    transform: none;
+  }
+}
+@keyframes book-lift {
+  from {
+    transform: none;
+  }
+  to {
+    transform: translateY(-115%) rotate(2deg);
+  }
+}
+
+/* A page turning forward (the right page swings over to the left) and back. */
+@keyframes leaf-next {
+  from {
+    transform: rotateY(0deg);
+  }
+  to {
+    transform: rotateY(-180deg);
+  }
+}
+@keyframes leaf-prev {
+  from {
+    transform: rotateY(0deg);
+  }
+  to {
+    transform: rotateY(180deg);
   }
 }
 

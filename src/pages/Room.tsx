@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 're
 import { useNavigate } from 'react-router';
 import { BookOpen, Check, Flag, Handshake, Loader2, LogOut, Play, RefreshCw, Swords, UserRound, WifiOff } from 'lucide-react';
 import { Board } from '../board/Board';
-import { GuideSheet } from '../guide/Guide';
+import { useGameManual } from '../guide/Guide';
 import { EffectsLayer } from '../effects/EffectsLayer';
 import { useClockTicks, useGameFx } from '../effects/useGameFx';
 import { setTension } from '../lib/audio/music';
@@ -326,8 +326,7 @@ function GameScreen({ s, game, onLeave }: { s: RoomScreen; game: GameView; onLea
   useTicker(running || (!!game.away && !over) || s.reconnecting !== null);
   const [box, size] = useSize<HTMLDivElement>();
   const shakeRef = useRef<HTMLDivElement>(null);
-  const [guide, setGuide] = useState(false);
-  const openGuide = () => setGuide(true);
+  const { openManual: openGuide, manual } = useGameManual(game.mode);
   useMusic(MODE_TRACK[game.mode] ?? null);
   const { holeHidden } = useGameFx(game, me, s.reconnecting !== null);
 
@@ -400,7 +399,7 @@ function GameScreen({ s, game, onLeave }: { s: RoomScreen; game: GameView; onLea
           ))}
         </div>
       </div>
-      {guide && <GuideSheet mode={game.mode} onClose={() => setGuide(false)} />}
+      {manual}
     </PlayLayout>
   );
 }
