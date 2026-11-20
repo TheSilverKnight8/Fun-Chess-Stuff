@@ -5,6 +5,7 @@
 
 import type { Color, MoveInfo, Position } from '../chess/types';
 import type { Result } from '../game/match';
+import type { Roll } from '../chess/pothole';
 
 export type FxEvent =
   | { t: 'start' }
@@ -19,7 +20,8 @@ export type FxEvent =
       /** This move ends the game by checkmate. */
       mate: boolean;
     }
-  | { t: 'end'; result: Result; pos: Position; me: Color; afterMove: boolean };
+  | { t: 'roll'; roll: Roll }
+  | { t: 'end'; result: Result; pos: Position; me: Color; afterMove: boolean; extraDelay: number };
 
 type Listener = (e: FxEvent) => void;
 const listeners = new Set<Listener>();
@@ -37,3 +39,14 @@ export function onFx(fn: Listener) {
 
 /** How long a piece takes to slide to its square (matches the board's CSS transition). */
 export const SLIDE_MS = 150;
+
+/**
+ * Pot-Hole's dice, in ms after the roll is shown: the six-sided die tumbles in
+ * and lands; on an even roll two eight-sided dice pick the file and rank and a
+ * crosshair drops on the square (again for each re-roll off a king); then the
+ * square cracks open.
+ */
+export const ROLL = { dieStart: SLIDE_MS + 100, dieLand: SLIDE_MS + 550, d8Start: SLIDE_MS + 700, d8Land: SLIDE_MS + 1050, cross: SLIDE_MS + 1100, reroll: 700, open: SLIDE_MS + 1300 };
+
+/** When the pothole cracks open, or null if none opens. */
+export const openAt = (roll: Roll) => (roll.opened === null ? null : ROLL.open + (roll.tries.length - 1) * ROLL.reroll);

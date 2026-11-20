@@ -1,4 +1,4 @@
-// How a Standard game ends on the board: checkmate, and the draws in spec
+// How a game ends on the board (Standard, Bastille, Pot-Hole): checkmate, and the draws in spec
 // section 6 (stalemate, threefold repetition, the fifty-move rule,
 // insufficient material). Caleb's answer: repetition and the fifty-move rule
 // end the game by themselves; nobody has to claim them.
@@ -11,7 +11,11 @@ export type BoardEnd =
   | { reason: 'stalemate' }
   | { reason: 'repetition' }
   | { reason: 'fifty' }
-  | { reason: 'material' };
+  | { reason: 'material' }
+  /** Bastille: a palace was emptied; the winner is the other side. */
+  | { reason: 'palace'; winner: Color }
+  /** Bastille: one move emptied both palaces (Claude's call in the spec: a draw). */
+  | { reason: 'palaceBoth' };
 
 /** A game in progress on the board: the position plus what the draw rules need to remember. */
 export interface BoardGame {
@@ -33,11 +37,14 @@ export function newBoardGame(pos: Position): BoardGame {
  * Plays a move if it is legal. Returns the new game, or null for an illegal move
  * or a game that is already over.
  */
-export function playMove(g: BoardGame, move: Move): BoardGame | null {
+export function playMove(g: BoardGame, move: Move, after?: (pos: Position) => Position): BoardGame | null {
   if (g.end) return null;
   const m = findLegal(g.pos, move);
   if (!m) return null;
-  const pos = play(g.pos, m);
+  let pos = play(g.pos, m);
+  // Something that happens after the move within the same turn (Pot-Hole's die
+  // roll). Skipped when the move itself ends the game.
+  if (after && !boardEnd({ pos, seen: g.seen, lastMove: m, end: null }, false)) pos = after(pos);
   const key = repetitionKey(pos);
   const seen = { ...g.seen, [key]: (g.seen[key] ?? 0) + 1 };
   const next: BoardGame = { pos, seen, lastMove: m, end: null };
@@ -45,19 +52,38 @@ export function playMove(g: BoardGame, move: Move): BoardGame | null {
   return next;
 }
 
+/** Bastille's palaces: d1, e1, d2, e2 for White; d8, e8, d7, e7 for Black. */
+export const PALACE: Record<Color, number[]> = { w: [3, 4, 11, 12], b: [59, 60, 51, 52] };
+
+/** How many of its own pieces a side has inside its palace (only the owner's pieces count: Caleb). */
+export const palaceCount = (pos: Position, c: Color) => PALACE[c].filter((s) => pos.board[s]?.color === c).length;
+
 /**
  * Checked in this order after every move: checkmate (it stands even if the
  * same move also completes a repetition or the fiftieth move), then stalemate,
  * insufficient material, threefold repetition, the fifty-move rule.
  */
-export function boardEnd(g: BoardGame): BoardEnd | null {
+export function boardEnd(g: BoardGame, repetition = true): BoardEnd | null {
   const { pos } = g;
+  if (pos.variant === 'bastille') {
+    // You win when the opponent has none of their own pieces in their palace, even if they emptied it themselves.
+    const wOut = palaceCount(pos, 'w') === 0;
+    const bOut = palaceCount(pos, 'b') === 0;
+    if (wOut && bOut) return { reason: 'palaceBoth' };
+    if (wOut) return { reason: 'palace', winner: 'b' };
+    if (bOut) return { reason: 'palace', winner: 'w' };
+    // Section 6 for Bastille: no legal move is a draw; repetition and the fifty-move rule apply; no insufficient material.
+    if (legalMoves(pos).length === 0) return { reason: 'stalemate' };
+    if (repetition && (g.seen[repetitionKey(pos)] ?? 0) >= 3) return { reason: 'repetition' };
+    if (pos.halfmove >= 100) return { reason: 'fifty' };
+    return null;
+  }
   const moves = legalMoves(pos);
   if (moves.length === 0) {
     return inCheck(pos) ? { reason: 'checkmate', winner: pos.turn === 'w' ? 'b' : 'w' } : { reason: 'stalemate' };
   }
   if (deadPosition(pos)) return { reason: 'material' };
-  if ((g.seen[repetitionKey(pos)] ?? 0) >= 3) return { reason: 'repetition' };
+  if (repetition && (g.seen[repetitionKey(pos)] ?? 0) >= 3) return { reason: 'repetition' };
   if (pos.halfmove >= 100) return { reason: 'fifty' };
   return null;
 }
@@ -78,6 +104,8 @@ export function repetitionKey(pos: Position): string {
   const c = pos.castling;
   s += ` ${pos.turn} ${c.w.k ? 'K' : ''}${c.w.q ? 'Q' : ''}${c.b.k ? 'k' : ''}${c.b.q ? 'q' : ''}`;
   if (pos.ep !== null && legalMoves(pos).some((m) => m.enPassant)) s += ` ep${pos.ep}`;
+  // Pot-Hole: the open pothole is part of the position (spec section 6), with the moves it has left (Claude Code's reading).
+  if (pos.hole) s += ` hole${pos.hole.sq}:${pos.hole.turns}`;
   return s;
 }
 

@@ -4,8 +4,9 @@
 //  2. The section 6 draws, checkmate, and the timeout rule on hand-made positions.
 
 import { checkers, fromFen, inCheck, legalMoves, play, startPosition } from '../src/chess/standard.ts';
-import { deadPosition, newBoardGame, playMove, sideCannotMate, type BoardGame } from '../src/chess/status.ts';
-import { parseSquare, type Position } from '../src/chess/types.ts';
+import { deadPosition, newBoardGame, playMove, repetitionKey, sideCannotMate, type BoardGame } from '../src/chess/status.ts';
+import { potholeStep } from '../src/chess/pothole.ts';
+import { parseSquare, type Position, type Variant } from '../src/chess/types.ts';
 
 let failed = false;
 const check = (ok: boolean, what: string) => {
@@ -62,6 +63,7 @@ for (const t of PERFT) {
 
 // ---------------------------------------------------------------- endings
 
+const START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 const mv = (g: BoardGame, from: string, to: string, promo?: 'Q' | 'R' | 'B' | 'N') => {
   const next = playMove(g, { from: parseSquare(from), to: parseSquare(to), promo });
   if (!next) throw new Error(`Illegal move ${from}-${to}`);
@@ -167,6 +169,83 @@ console.log('\nEndings');
   check(!sideCannotMate(p, 'w'), 'K+N+Q can mate (timeout loses)');
   check(sideCannotMate(p, 'b'), 'a lone king cannot mate (timeout against it is a draw)');
   check(sideCannotMate(fromFen('8/8/8/4k3/8/8/8/1N2K3 w - - 0 1'), 'w'), 'K+N alone cannot mate');
+}
+
+// ---------------------------------------------------------------- Bastille
+
+const variant = (fen: string, v: Variant, hole: number | null = null): Position => ({ ...fromFen(fen), variant: v, hole: hole === null ? null : { sq: hole, turns: 1 } });
+const P = parseSquare;
+const has = (pos: Position, from: string, to: string) => legalMoves(pos).some((m) => m.from === P(from) && m.to === P(to));
+
+console.log('\nBastille');
+{
+  check(legalMoves(startPosition('bastille')).length === 20, 'Bastille start: 20 moves');
+  const k = variant('8/8/8/8/3q4/8/8/4K3 w - - 0 1', 'bastille');
+  check(has(k, 'e1', 'd2') && has(k, 'e1', 'e2'), 'the king may move onto attacked squares (no check)');
+  const kc = variant('k7/8/8/8/8/8/8/R3K3 w - - 0 1', 'bastille');
+  check(has(kc, 'a1', 'a8'), 'a king can be captured');
+  let g = newBoardGame(variant('k7/3p4/8/8/8/3R4/8/4K3 w - - 0 1', 'bastille'));
+  g = mv(g, 'd3', 'd7');
+  check(g.end?.reason === 'palace' && 'winner' in g.end && g.end.winner === 'w', 'capturing the last piece in the black palace: White wins');
+  g = newBoardGame(variant('k7/3p4/8/8/8/8/8/4K3 b - - 0 1', 'bastille'));
+  g = mv(g, 'd7', 'd6');
+  check(g.end?.reason === 'palace' && 'winner' in g.end && g.end.winner === 'w', 'emptying your own palace loses (self-inflicted)');
+  g = newBoardGame(variant('k7/3p4/8/8/8/8/3Q4/K7 w - - 0 1', 'bastille'));
+  g = mv(g, 'd2', 'd7');
+  check(g.end?.reason === 'palaceBoth', 'one move emptying both palaces is a draw (an enemy piece in a palace does not count)');
+  g = newBoardGame(variant('k7/3p4/8/8/8/8/8/R3K3 w - - 0 1', 'bastille'));
+  g = mv(g, 'a1', 'a8');
+  check(g.end === null, 'the game goes on after a king is captured');
+  check(!deadPosition(g.pos) || g.end === null, 'insufficient material does not end a Bastille game');
+  const castle = variant('4k3/8/8/8/8/8/8/4K2R w K - 0 1', 'bastille');
+  check(has(castle, 'e1', 'g1'), 'castling is allowed');
+  const castleAtt = variant('4kr2/8/8/8/8/8/8/4K2R w K - 0 1', 'bastille');
+  check(!has(castleAtt, 'e1', 'g1'), 'castling across an attacked square is not (orthodox limits kept)');
+}
+
+// ---------------------------------------------------------------- Pot-Hole
+
+console.log('\nPot-Hole');
+{
+  check(legalMoves(variant(START_FEN, 'pothole')).length === 20, 'Pot-Hole start: 20 moves');
+  const rook = variant('4k3/8/8/8/8/8/8/R3K3 w - - 0 1', 'pothole', P('c1'));
+  check(has(rook, 'a1', 'b1') && !has(rook, 'a1', 'c1') && !has(rook, 'a1', 'd1'), 'a rook can neither enter nor pass over the pothole');
+  const knight = variant('4k3/8/8/8/8/8/1P6/1N2K3 w - - 0 1', 'pothole', P('b2'));
+  check(has(knight, 'b1', 'c3') && has(knight, 'b1', 'a3'), 'a knight jumps over a pothole');
+  const knightIn = variant('4k3/8/8/8/8/8/8/1N2K3 w - - 0 1', 'pothole', P('c3'));
+  check(!has(knightIn, 'b1', 'c3'), 'a knight cannot land in a pothole');
+  const pawn = variant('4k3/8/8/8/8/8/4P3/4K3 w - - 0 1', 'pothole', P('e3'));
+  check(!has(pawn, 'e2', 'e3') && !has(pawn, 'e2', 'e4'), 'a pawn cannot step into or over a pothole');
+  const pawn2 = variant('4k3/8/8/8/8/8/4P3/4K3 w - - 0 1', 'pothole', P('e4'));
+  check(has(pawn2, 'e2', 'e3') && !has(pawn2, 'e2', 'e4'), 'a pawn cannot double-step into a pothole');
+  check(!inCheck(variant('4k3/8/8/8/8/8/8/4R1K1 b - - 0 1', 'pothole', P('e4'))), 'a rook does not give check across a pothole');
+  check(inCheck(variant('4k3/8/3N4/4p3/8/8/8/6K1 b - - 0 1', 'pothole', P('e7'))), 'a knight gives check over a pothole');
+  check(!has(variant('4k3/8/8/8/8/8/8/4K2R w K - 0 1', 'pothole', P('g1')), 'e1', 'g1'), 'no castling onto a pothole');
+  check(!has(variant('4k3/8/8/8/8/8/8/4K2R w K - 0 1', 'pothole', P('f1')), 'e1', 'g1'), 'no castling over a pothole');
+  // A pothole can expose a king on the other side's turn; the king still cannot be captured.
+  const exposed = { ...variant('4k3/8/8/8/8/8/8/r3K3 b - - 0 1', 'pothole') };
+  check(!legalMoves(exposed).some((m) => m.captured?.kind === 'K'), 'a king exposed by a pothole cannot be captured');
+
+  // The dice: a fixed sequence of numbers stands in for the host's random source.
+  const seq = (xs: number[]) => {
+    let i = 0;
+    return () => xs[i++];
+  };
+  const start = startPosition('pothole');
+  // d6 = 1 (odd): nothing opens.
+  let r = potholeStep(start, 1, seq([0]), 'base');
+  check(r.roll.opened === null && !r.pos.hole, 'an odd roll opens nothing');
+  // d6 = 2 (even), lands on e1 (the white king: file 4, rank 0) → re-roll, lands on d2.
+  r = potholeStep(start, 1, seq([1, 4, 0, 3, 1]), 'base');
+  check(r.roll.tries.length === 2 && r.roll.opened === P('d2') && r.roll.removed?.kind === 'P', 'a pothole on a king is re-rolled; the piece on the new square falls in');
+  check(r.pos.board[P('d2')] === null && r.pos.hole?.sq === P('d2') && r.pos.hole.turns === 1, 'the square is empty and blocked for one turn');
+  const after = potholeStep(r.pos, 2, seq([0]), 'base');
+  check(after.roll.closed === P('d2') && !after.pos.hole, 'the base pothole closes after the other player’s turn');
+  const rnd = potholeStep(start, 1, seq([3, 2, 5, 3]), 'random');
+  check(rnd.roll.turns === 4 && rnd.pos.hole?.turns === 4, 'random duration: a six-sided roll for 1 to 6 turns');
+  const busy = potholeStep(rnd.pos, 2, seq([1]), 'random');
+  check(busy.roll.opened === null && busy.pos.hole?.turns === 3, 'only one pothole at a time: an even roll while one is open opens nothing');
+  check(repetitionKey(rnd.pos) !== repetitionKey({ ...rnd.pos, hole: { sq: rnd.pos.hole!.sq, turns: 2 } }), 'the pothole and its turns left are part of the position');
 }
 
 console.log(failed ? '\nSome checks FAILED' : '\nAll checks passed');

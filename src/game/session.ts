@@ -24,9 +24,18 @@ import {
   viewOf,
   type GameView,
   type MatchState,
+  DEFAULT_OPTIONS,
+  type ModeOptions,
   type Result,
 } from './match';
 import { sameTime, type TimeControl } from './time';
+
+/** The host's dice (Pot-Hole): whole numbers 0..n-1 from the browser's secure random source. */
+function dice(n: number) {
+  const a = new Uint32Array(1);
+  crypto.getRandomValues(a);
+  return a[0] % n;
+}
 
 /** How long a player who lost connection has to come back before they forfeit. */
 export const GRACE_MS = 30_000;
@@ -36,6 +45,7 @@ const REJOIN_TRY_MS = 8_000;
 export interface Setup {
   mode: ModeId;
   time: TimeControl;
+  options: ModeOptions;
 }
 
 export interface RoomScreen {
@@ -58,7 +68,7 @@ export interface RoomScreen {
   reconnecting: number | null;
 }
 
-const DEFAULT_SETUP: Setup = { mode: 'standard', time: null };
+const DEFAULT_SETUP: Setup = { mode: 'standard', time: null, options: DEFAULT_OPTIONS };
 
 const blank: RoomScreen = {
   status: 'closed',
@@ -195,7 +205,7 @@ export function gameInProgress() {
 export function setSetup(p: Partial<Setup>) {
   if (roomStore.get().role !== 'host') return;
   const next = { ...setup, ...p };
-  if (next.mode === setup.mode && sameTime(next.time, setup.time)) return;
+  if (next.mode === setup.mode && sameTime(next.time, setup.time) && next.options.potholeDuration === setup.options.potholeDuration) return;
   setup = next;
   publish();
 }
@@ -227,7 +237,7 @@ export function backToSetup() {
 
 function beginGame(hostColor: Color) {
   gamesPlayed++;
-  match = newMatch(gamesPlayed, setup.mode, setup.time, hostColor, now());
+  match = newMatch(gamesPlayed, setup.mode, setup.time, hostColor, now(), setup.options);
   patch({ phase: 'game' });
   publish();
 }
@@ -280,7 +290,7 @@ function fromGuest(msg: RoomMessage) {
   let next: MatchState | null = null;
   if (msg.t === 'move' && isMove(msg.move)) {
     const used = typeof msg.used === 'number' && msg.used >= 0 ? msg.used : null;
-    next = moveIn(match, guest, msg.move, used ?? Infinity, t);
+    next = moveIn(match, guest, msg.move, used ?? Infinity, t, dice);
   } else if (msg.t === 'resign') next = resign(match, guest, t);
   else if (msg.t === 'draw') {
     if (msg.a === 'offer') next = offerDraw(match, guest);
@@ -421,7 +431,7 @@ export function playerMove(move: Move) {
   if (!s.game || s.game.result || !s.myColor || s.game.pos.turn !== s.myColor) return;
   if (s.role === 'host') {
     if (!match) return;
-    const next = moveIn(match, match.hostColor, move, null, now());
+    const next = moveIn(match, match.hostColor, move, null, now(), dice);
     if (!next) return;
     match = next;
     publish();

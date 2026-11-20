@@ -7,10 +7,12 @@ import { getAudio, whenAudioStarts } from './engine';
 // A game track can have a tension layer that fades in while a king is in check
 // or a clock is low (setTension).
 
-export type TrackId = 'menu' | 'standard';
+export type TrackId = 'menu' | 'standard' | 'bastille' | 'pothole';
 
 interface Track {
   bpm: number;
+  /** 0 = straight eighths, up to ~0.33 for a swing feel. */
+  swing?: number;
   lead: number[];
   leadType: OscillatorType;
   /** Piano-like voices that ring on (the score's sustain pedal) instead of short notes. */
@@ -79,7 +81,68 @@ const standard: Track = {
   },
 };
 
-const TRACKS: Record<TrackId, Track> = { menu, standard };
+// "Storming" (Bastille Chess): a revolutionary march in G minor (Gm, Gm, Eb, D,
+// Gm, Cm, D, Gm), square-wave fife lead, snare-heavy drums. Tension: a snare
+// roll and a sawtooth arpeggio.
+const gm = [55, 58, 62];
+const eb = [55, 58, 63];
+const dM = [54, 57, 62];
+const cm = [55, 60, 63];
+const bastille: Track = {
+  bpm: 120,
+  leadType: 'square',
+  lead: [
+    ...bar(67, 0, 67, 67, 70, 0, 67, 0),
+    ...bar(74, 0, 72, 70, 69, 0, 67, 0),
+    ...bar(70, 0, 70, 70, 72, 0, 74, 0),
+    ...bar(69, 0, 66, 69, 74, 0, 0, 0),
+    ...bar(79, 0, 79, 79, 77, 0, 74, 0),
+    ...bar(75, 0, 74, 72, 70, 0, 72, 0),
+    ...bar(74, 0, 72, 70, 69, 66, 62, 0),
+    ...bar(67, 0, 62, 0, 67, 0, 0, 0),
+  ],
+  bass: [43, 43, 39, 38, 43, 36, 38, 43].flatMap((r) => bar(r, 0, r + 7, 0, r, 0, r + 7, 0)),
+  chords: [gm, gm, eb, dM, gm, cm, dM, gm].flatMap((ch) => [ch, null, null, null, ch, null, null, null]),
+  drums: rep(['k.s.k.ss'], 8).join(''),
+  tension: {
+    drums: rep(['ssssksss'], 8).join(''),
+    arp: [gm, gm, eb, dM, gm, cm, dM, gm].flatMap((ch) => [ch[0] + 12, ch[1] + 12, ch[2] + 12, ch[0] + 24, ch[2] + 12, ch[1] + 12, ch[0] + 12, ch[1] + 12]),
+    arpType: 'sawtooth',
+  },
+};
+
+// "Bumpy Road" (Pot-Hole Chess): a lurching, swung tune in D (D, D, C, G, D, D,
+// A, D) with a bouncing octave bass and a lead that keeps jumping. Tension:
+// doubled kicks and a square-wave arpeggio.
+const dMaj = [62, 66, 69];
+const cMaj = [60, 64, 67];
+const gMaj = [59, 62, 67];
+const aMaj = [61, 64, 69];
+const pothole: Track = {
+  bpm: 104,
+  swing: 0.3,
+  leadType: 'triangle',
+  lead: [
+    ...bar(74, 0, 69, 0, 66, 69, 74, 0),
+    ...bar(78, 0, 76, 74, 0, 69, 0, 0),
+    ...bar(76, 0, 72, 0, 67, 72, 76, 0),
+    ...bar(74, 0, 71, 0, 67, 0, 0, 0),
+    ...bar(74, 0, 78, 0, 81, 0, 78, 74),
+    ...bar(76, 0, 74, 0, 72, 71, 69, 0),
+    ...bar(73, 0, 76, 0, 81, 0, 79, 76),
+    ...bar(74, 0, 0, 0, 62, 0, 0, 0),
+  ],
+  bass: [38, 38, 36, 43, 38, 38, 45, 38].flatMap((r) => bar(r, r + 12, 0, r, r + 12, 0, r + 7, 0)),
+  chords: [dMaj, dMaj, cMaj, gMaj, dMaj, dMaj, aMaj, dMaj].flatMap((ch) => [null, ch, null, null, null, ch, null, null]),
+  drums: rep(['k.hskkhs'], 8).join(''),
+  tension: {
+    drums: rep(['kkhskkhs'], 8).join(''),
+    arp: [dMaj, dMaj, cMaj, gMaj, dMaj, dMaj, aMaj, dMaj].flatMap((ch) => [ch[0] + 12, ch[2] + 12, ch[1] + 12, ch[2] + 12, ch[0] + 24, ch[2] + 12, ch[1] + 12, ch[0] + 12]),
+    arpType: 'square',
+  },
+};
+
+const TRACKS: Record<TrackId, Track> = { menu, standard, bastille, pothole };
 
 const midiHz = (m: number) => 440 * 2 ** ((m - 69) / 12);
 const LOOKAHEAD = 0.2;
@@ -141,7 +204,7 @@ function schedule(c: NonNullable<typeof current>) {
   if (c.next < a.ctx.currentTime - 0.25) c.next = a.ctx.currentTime + 0.05;
   while (c.next < a.ctx.currentTime + LOOKAHEAD) {
     const i = c.step % t.lead.length;
-    const at = c.next;
+    const at = c.next + (c.step % 2 === 1 ? (t.swing ?? 0) * eighth : 0);
     const len = eighth * 0.9;
     const b = t.bass[i % t.bass.length];
     if (t.piano) {

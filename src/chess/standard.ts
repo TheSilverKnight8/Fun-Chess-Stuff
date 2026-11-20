@@ -15,6 +15,7 @@ import {
   type MoveInfo,
   type Piece,
   type Position,
+  type Variant,
 } from './types';
 
 const KNIGHT_STEPS = [
@@ -59,7 +60,7 @@ const ROOK_HOME: Record<Color, { k: number; q: number }> = {
 };
 const KING_HOME: Record<Color, number> = { w: sq(4, 0), b: sq(4, 7) };
 
-export function startPosition(): Position {
+export function startPosition(variant: Variant = 'standard'): Position {
   const board: (Piece | null)[] = new Array(64).fill(null);
   let id = 1;
   for (let f = 0; f < 8; f++) {
@@ -78,6 +79,8 @@ export function startPosition(): Position {
     halfmove: 0,
     fullmove: 1,
     nextId: id,
+    variant,
+    hole: null,
   };
 }
 
@@ -90,7 +93,7 @@ export function findKing(pos: Position, color: Color): number {
 }
 
 /** Is square `target` attacked by any piece of color `by`? */
-export function isAttacked(board: (Piece | null)[], target: number, by: Color): boolean {
+export function isAttacked(board: (Piece | null)[], target: number, by: Color, hole: number | null = null): boolean {
   const tf = fileOf(target);
   const tr = rankOf(target);
   // Pawns: a white pawn attacks up the board, so look one rank down from the target.
@@ -118,16 +121,18 @@ export function isAttacked(board: (Piece | null)[], target: number, by: Color): 
       if (p && p.color === by && p.kind === 'K') return true;
     }
   }
-  if (slides(board, tf, tr, ROOK_DIRS, by, 'R')) return true;
-  if (slides(board, tf, tr, BISHOP_DIRS, by, 'B')) return true;
+  if (slides(board, tf, tr, ROOK_DIRS, by, 'R', hole)) return true;
+  if (slides(board, tf, tr, BISHOP_DIRS, by, 'B', hole)) return true;
   return false;
 }
 
-function slides(board: (Piece | null)[], tf: number, tr: number, dirs: readonly (readonly [number, number])[], by: Color, kind: 'R' | 'B') {
+function slides(board: (Piece | null)[], tf: number, tr: number, dirs: readonly (readonly [number, number])[], by: Color, kind: 'R' | 'B', hole: number | null) {
   for (const [df, dr] of dirs) {
     let f = tf + df;
     let r = tr + dr;
     while (onBoard(f, r)) {
+      // Pot-Hole: nothing but a knight passes over an open pothole, so it blocks a line.
+      if (sq(f, r) === hole) break;
       const p = board[sq(f, r)];
       if (p) {
         if (p.color === by && (p.kind === kind || p.kind === 'Q')) return true;
@@ -141,7 +146,7 @@ function slides(board: (Piece | null)[], tf: number, tr: number, dirs: readonly 
 }
 
 /** Does the piece on `from` attack `target`? */
-export function attacks(board: (Piece | null)[], from: number, target: number): boolean {
+export function attacks(board: (Piece | null)[], from: number, target: number, hole: number | null = null): boolean {
   const p = board[from];
   if (!p || from === target) return false;
   const df = fileOf(target) - fileOf(from);
@@ -162,7 +167,7 @@ export function attacks(board: (Piece | null)[], from: number, target: number): 
       let f = fileOf(from) + sf;
       let r = rankOf(from) + sr;
       while (f !== fileOf(target) || r !== rankOf(target)) {
-        if (board[sq(f, r)]) return false;
+        if (board[sq(f, r)] || sq(f, r) === hole) return false;
         f += sf;
         r += sr;
       }
@@ -178,23 +183,36 @@ export function checkers(pos: Position): number[] {
   const out: number[] = [];
   for (let s = 0; s < 64; s++) {
     const p = pos.board[s];
-    if (p && p.color !== pos.turn && attacks(pos.board, s, k)) out.push(s);
+    if (p && p.color !== pos.turn && attacks(pos.board, s, k, holeOf(pos))) out.push(s);
   }
   return out;
 }
 
+/** The open pothole's square (Pot-Hole), or null. */
+export const holeOf = (pos: Position) => pos.hole?.sq ?? null;
+
+/** Do kings count as royal (check, checkmate)? Not in Bastille Chess. */
+export const royal = (pos: Position) => pos.variant !== 'bastille';
+
 export function inCheck(pos: Position, color: Color = pos.turn): boolean {
+  if (!royal(pos)) return false;
   const k = findKing(pos, color);
-  return k >= 0 && isAttacked(pos.board, k, other(color));
+  return k >= 0 && isAttacked(pos.board, k, other(color), holeOf(pos));
 }
 
 /** Moves that follow the pieces' movement rules, before checking that the own king is safe. */
 function pseudoMoves(pos: Position): MoveInfo[] {
   const out: MoveInfo[] = [];
   const { board, turn } = pos;
+  const hole = holeOf(pos);
+  // Where kings are royal, a king is never captured (it is checkmated instead).
+  // A pothole can expose a king to attack on the other player's turn; it still cannot be taken.
+  const kingSafe = royal(pos);
   const add = (from: number, to: number, extra: Partial<MoveInfo> = {}) => {
+    if (to === hole) return;
     const piece = board[from]!;
     const captured = extra.enPassant ? board[extra.captureSq!] : board[to];
+    if (kingSafe && captured?.kind === 'K') return;
     out.push({
       from,
       to,
@@ -223,7 +241,7 @@ function pseudoMoves(pos: Position): MoveInfo[] {
         if (rankOf(to) === lastRank) for (const promo of PROMO_KINDS) add(from, to, { ...extra, promo });
         else add(from, to, extra);
       };
-      if (onBoard(f0, r1) && !board[sq(f0, r1)]) {
+      if (onBoard(f0, r1) && !board[sq(f0, r1)] && sq(f0, r1) !== hole) {
         pushPawn(sq(f0, r1));
         const r2 = r0 + 2 * dir;
         if (r0 === startRank && !board[sq(f0, r2)]) add(from, sq(f0, r2), { double: true });
@@ -262,6 +280,7 @@ function pseudoMoves(pos: Position): MoveInfo[] {
       let r = r0 + dr;
       while (onBoard(f, r)) {
         const to = sq(f, r);
+        if (to === hole) break;
         const target = board[to];
         if (target) {
           if (target.color !== turn) add(from, to);
@@ -279,7 +298,10 @@ function pseudoMoves(pos: Position): MoveInfo[] {
 /**
  * Castling: the king and that rook have not moved (the castling right), the
  * squares between them are empty, and the king is not in check, does not pass
- * through an attacked square, and does not land on one.
+ * through an attacked square, and does not land on one. Pot-Hole: no square
+ * the king or rook passes over or lands on may be the open pothole. Bastille
+ * keeps the same limits (Claude Code's reading: castling "as in the source",
+ * and the source keeps orthodox castling).
  */
 function castleMoves(pos: Position, from: number, add: (from: number, to: number, extra?: Partial<MoveInfo>) => void) {
   const c = pos.turn;
@@ -287,8 +309,11 @@ function castleMoves(pos: Position, from: number, add: (from: number, to: number
   const rights = pos.castling[c];
   if (!rights.k && !rights.q) return;
   const enemy = other(c);
-  if (isAttacked(pos.board, from, enemy)) return;
+  const hole = holeOf(pos);
+  const att = (s: number) => isAttacked(pos.board, s, enemy, hole);
+  if (att(from)) return;
   const r = rankOf(from);
+  const clear = (...files: number[]) => files.every((f) => !pos.board[sq(f, r)] && sq(f, r) !== hole);
   const rookOk = (s: number) => {
     const p = pos.board[s];
     return !!p && p.kind === 'R' && p.color === c;
@@ -296,19 +321,20 @@ function castleMoves(pos: Position, from: number, add: (from: number, to: number
   if (rights.k && rookOk(ROOK_HOME[c].k)) {
     const f1 = sq(5, r);
     const g1 = sq(6, r);
-    if (!pos.board[f1] && !pos.board[g1] && !isAttacked(pos.board, f1, enemy) && !isAttacked(pos.board, g1, enemy)) add(from, g1, { castle: 'k' });
+    if (clear(5, 6) && !att(f1) && !att(g1)) add(from, g1, { castle: 'k' });
   }
   if (rights.q && rookOk(ROOK_HOME[c].q)) {
     const d1 = sq(3, r);
     const c1 = sq(2, r);
-    const b1 = sq(1, r);
-    if (!pos.board[d1] && !pos.board[c1] && !pos.board[b1] && !isAttacked(pos.board, d1, enemy) && !isAttacked(pos.board, c1, enemy)) add(from, c1, { castle: 'q' });
+    if (clear(1, 2, 3) && !att(d1) && !att(c1)) add(from, c1, { castle: 'q' });
   }
 }
 
 /** Every legal move for the side to move. */
 export function legalMoves(pos: Position): MoveInfo[] {
   const mover = pos.turn;
+  // Bastille: no royal pieces, so no check: every move that follows the pieces' rules is legal.
+  if (!royal(pos)) return pseudoMoves(pos);
   return pseudoMoves(pos).filter((m) => !inCheck(play(pos, m), mover));
 }
 
@@ -348,6 +374,8 @@ export function play(pos: Position, m: MoveInfo): Position {
     halfmove: m.piece.kind === 'P' || m.captured ? 0 : pos.halfmove + 1,
     fullmove: c === 'b' ? pos.fullmove + 1 : pos.fullmove,
     nextId,
+    variant: pos.variant,
+    hole: pos.hole ?? null,
   };
 }
 

@@ -23,6 +23,15 @@ export interface Castling {
   q: boolean;
 }
 
+/** Which rules the position is played under (the board-level modes). */
+export type Variant = 'standard' | 'bastille' | 'pothole';
+
+/** An open pothole (Pot-Hole Chess): its square, and how many more moves it stays open. */
+export interface Hole {
+  sq: number;
+  turns: number;
+}
+
 export interface Position {
   board: (Piece | null)[];
   turn: Color;
@@ -35,6 +44,10 @@ export interface Position {
   fullmove: number;
   /** The next free piece id (promotions make new pieces). */
   nextId: number;
+  /** Missing means Standard. */
+  variant?: Variant;
+  /** Pot-Hole: the open pothole, if any. */
+  hole?: Hole | null;
 }
 
 /** A move as a player gives it. */

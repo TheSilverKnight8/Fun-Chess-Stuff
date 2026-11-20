@@ -4,8 +4,10 @@
 
 import { newBoardGame, playMove, sideCannotMate, type BoardGame } from '../chess/status';
 import { startPosition } from '../chess/standard';
+import { potholeStep, type PotholeDuration, type Rand, type Roll } from '../chess/pothole';
 import { other, type Color, type Move, type MoveInfo, type Position } from '../chess/types';
 import type { ModeId } from '../modes';
+import type { Variant } from '../chess/types';
 import type { TimeControl } from './time';
 
 export type EndReason =
@@ -23,7 +25,11 @@ export type EndReason =
   /** Lost connection and did not come back within the grace period. */
   | 'forfeit'
   /** Left the room during the game. */
-  | 'left';
+  | 'left'
+  /** Bastille: the loser's palace was emptied. */
+  | 'palace'
+  /** Bastille: one move emptied both palaces (a draw). */
+  | 'palaceBoth';
 
 export interface Result {
   winner: Color | null;
@@ -37,6 +43,16 @@ export interface Result {
  */
 export const LAG_CREDIT_MS = 1000;
 
+/** Options the host sets for a mode (spec: "sets any mode options"). */
+export interface ModeOptions {
+  /** Pot-Hole: base rule (one turn) or the authors' random duration. */
+  potholeDuration: PotholeDuration;
+}
+
+export const DEFAULT_OPTIONS: ModeOptions = { potholeDuration: 'base' };
+
+const VARIANT: Partial<Record<ModeId, Variant>> = { bastille: 'bastille', pothole: 'pothole' };
+
 export interface MatchState {
   /** Counts the games in this room, so a view can tell a new game from the last one. */
   number: number;
@@ -49,6 +65,9 @@ export interface MatchState {
   /** The side that offered a draw, while the offer is open. */
   drawOffer: Color | null;
   result: Result | null;
+  options: ModeOptions;
+  /** Pot-Hole: the dice after the last move. */
+  roll: Roll | null;
 }
 
 /** What both screens show. Clock times are as of the moment the view was made. */
@@ -62,22 +81,26 @@ export interface GameView {
   clock: { w: number; b: number; running: Color | null } | null;
   drawOffer: Color | null;
   result: Result | null;
+  options: ModeOptions;
+  roll: Roll | null;
   /** A player who lost connection, and how long they have to come back. */
   away: { color: Color; msLeft: number } | null;
 }
 
-export function newMatch(number: number, mode: ModeId, time: TimeControl, hostColor: Color, now: number): MatchState {
+export function newMatch(number: number, mode: ModeId, time: TimeControl, hostColor: Color, now: number, options: ModeOptions = DEFAULT_OPTIONS): MatchState {
   const ms = time ? time.minutes * 60_000 : 0;
   return {
     number,
     mode,
     time,
     hostColor,
-    game: newBoardGame(startPosition()),
+    game: newBoardGame(startPosition(VARIANT[mode] ?? 'standard')),
     // White's clock runs from the start of the game.
     clock: time ? { w: ms, b: ms, running: 'w', stamp: now } : null,
     drawOffer: null,
     result: null,
+    options,
+    roll: null,
   };
 }
 
@@ -104,6 +127,8 @@ function end(m: MatchState, result: Result, now: number): MatchState {
 /** Running out of time loses, unless the opponent could never checkmate (then a draw). */
 function timeoutResult(m: MatchState, flagged: Color): Result {
   const opp = other(flagged);
+  // Bastille: insufficient material does not apply (section 6), so running out of time always loses (Claude Code's reading).
+  if (m.game.pos.variant === 'bastille') return { winner: opp, reason: 'timeout' };
   return sideCannotMate(m.game.pos, opp) ? { winner: null, reason: 'timeoutDraw' } : { winner: opp, reason: 'timeout' };
 }
 
@@ -112,7 +137,7 @@ function timeoutResult(m: MatchState, flagged: Color): Result {
  * thought (null for the host, whose time the host's device measures itself).
  * Returns null if the move is not allowed.
  */
-export function moveIn(m: MatchState, color: Color, move: Move, reported: number | null, now: number): MatchState | null {
+export function moveIn(m: MatchState, color: Color, move: Move, reported: number | null, now: number, rand?: Rand): MatchState | null {
   if (m.result || m.game.pos.turn !== color) return null;
   let clock = m.clock ? { ...m.clock } : null;
   if (clock && m.time) {
@@ -121,7 +146,18 @@ export function moveIn(m: MatchState, color: Color, move: Move, reported: number
     if (used >= clock[color]) return end(m, timeoutResult(m, color), now);
     clock[color] = clock[color] - used + m.time.increment * 1000;
   }
-  const game = playMove(m.game, move);
+  // Pot-Hole: the host rolls the dice within the turn, after the move.
+  let roll: Roll | null = null;
+  const ply = (m.game.pos.fullmove - 1) * 2 + (m.game.pos.turn === 'b' ? 1 : 0) + 1;
+  const after =
+    m.game.pos.variant === 'pothole' && rand
+      ? (pos: Position) => {
+          const r = potholeStep(pos, ply, rand, m.options.potholeDuration);
+          roll = r.roll;
+          return r.pos;
+        }
+      : undefined;
+  const game = playMove(m.game, move, after);
   if (!game) return null;
   if (clock) {
     clock.running = other(color);
@@ -129,10 +165,10 @@ export function moveIn(m: MatchState, color: Color, move: Move, reported: number
   }
   // A draw offer stays open until the player it was made to moves (or answers it).
   const drawOffer = m.drawOffer && m.drawOffer !== color ? null : m.drawOffer;
-  const next: MatchState = { ...m, game, clock, drawOffer };
+  const next: MatchState = { ...m, game, clock, drawOffer, roll };
   if (game.end) {
     const e = game.end;
-    return end(next, e.reason === 'checkmate' ? { winner: e.winner, reason: 'checkmate' } : { winner: null, reason: e.reason }, now);
+    return end(next, 'winner' in e ? { winner: e.winner, reason: e.reason } : { winner: null, reason: e.reason }, now);
   }
   return next;
 }
@@ -179,6 +215,8 @@ export function viewOf(m: MatchState, now: number, away: GameView['away']): Game
     clock: m.clock ? { w: timeLeft(m, 'w', now), b: timeLeft(m, 'b', now), running: m.clock.running } : null,
     drawOffer: m.drawOffer,
     result: m.result,
+    options: m.options,
+    roll: m.roll,
     away,
   };
 }
@@ -198,4 +236,6 @@ export const RESULT_TEXT: Record<EndReason, string> = {
   agreement: 'Draw agreed',
   forfeit: 'Disconnected',
   left: 'Left the game',
+  palace: 'Palace emptied',
+  palaceBoth: 'Both palaces emptied',
 };
