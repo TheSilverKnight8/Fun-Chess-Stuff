@@ -14,6 +14,14 @@ export type Part = { t: 'body' | 'line'; d: string } | { t: 'dot'; cx: number; c
 const plinth: Part = { t: 'body', d: 'M22 89h56a3 3 0 0 0 3-3v-3a5 5 0 0 0-5-5H24a5 5 0 0 0-5 5v3a3 3 0 0 0 3 3z' };
 
 export const ART: Record<Kind, Part[]> = {
+  // Bario's undefined Quantum: an orb on a pedestal, ringed by an orbit, with a question mark.
+  X: [
+    plinth,
+    { t: 'body', d: 'M33 78c3-8 7-13 9-18h16c2 5 6 10 9 18z' },
+    { t: 'body', d: 'M50 14a22 22 0 1 1 0 44a22 22 0 1 1 0-44z' },
+    { t: 'line', d: 'M23 42c8 8 46 8 54-6M44 30c0-5 12-6 12 1 0 5-6 5-6 10' },
+    { t: 'dot', cx: 50, cy: 47.5, r: 2.4 },
+  ],
   P: [
     plinth,
     { t: 'body', d: 'M30 78c3-9 8-14 11-19h18c3 5 8 10 11 19z' },

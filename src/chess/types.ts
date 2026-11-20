@@ -4,7 +4,8 @@
 // Squares are numbers 0..63: a1 = 0, b1 = 1, ... h1 = 7, a2 = 8, ... h8 = 63.
 
 export type Color = 'w' | 'b';
-export type Kind = 'K' | 'Q' | 'R' | 'B' | 'N' | 'P';
+/** X: Bario's undefined Quantum piece. */
+export type Kind = 'K' | 'Q' | 'R' | 'B' | 'N' | 'P' | 'X';
 export type PromoKind = 'Q' | 'R' | 'B' | 'N';
 
 export const PROMO_KINDS: readonly PromoKind[] = ['Q', 'R', 'B', 'N'];
@@ -23,6 +24,8 @@ export interface Piece {
   kills?: number;
   /** Remorse: a devastated piece's owner-turns left before it self-captures. */
   due?: number;
+  /** Bario: a Quantum piece (undefined while its kind is X; defined as Q, R, B or N until its cycle ends). */
+  quantum?: boolean;
 }
 
 export interface Castling {
@@ -33,7 +36,7 @@ export interface Castling {
 }
 
 /** Which rules the position is played under (the board-level modes). */
-export type Variant = 'standard' | 'bastille' | 'pothole' | 'megaknight' | 'remorse';
+export type Variant = 'standard' | 'bastille' | 'pothole' | 'megaknight' | 'remorse' | 'bario' | 'rental';
 
 /** An open pothole (Pot-Hole Chess): its square, and how many more moves it stays open. */
 export interface Hole {
@@ -63,6 +66,10 @@ export interface Position {
   mkRoll?: boolean;
   /** Remorse: the square of a psychopath that has its extra move to make (same side to move). */
   extra?: number | null;
+  /** Bario: promotions so far (each raises every type's cap by 1 for that side) and cycles completed. */
+  bario?: { promos: Record<Color, number>; cycles: Record<Color, number> };
+  /** Rental: each side's treasury, and rent owed by the side to move while they choose units to give up. */
+  rental?: { treasury: Record<Color, number>; owed: number | null };
 }
 
 /** A move as a player gives it. */
@@ -72,6 +79,8 @@ export interface Move {
   promo?: PromoKind;
   /** Mega Knight: moves a mega knight (from and to are its lower-left squares). */
   mk?: boolean;
+  /** Bario: the type an undefined Quantum becomes with this move. */
+  define?: PromoKind;
 }
 
 /** A legal move with everything the board needs to show it. */
@@ -111,4 +120,4 @@ export function parseSquare(name: string): number {
 export const isLightSquare = (s: number) => (fileOf(s) + rankOf(s)) % 2 === 1;
 
 export const COLOR_NAME: Record<Color, string> = { w: 'White', b: 'Black' };
-export const KIND_NAME: Record<Kind, string> = { K: 'King', Q: 'Queen', R: 'Rook', B: 'Bishop', N: 'Knight', P: 'Pawn' };
+export const KIND_NAME: Record<Kind, string> = { K: 'King', Q: 'Queen', R: 'Rook', B: 'Bishop', N: 'Knight', P: 'Pawn', X: 'Quantum' };

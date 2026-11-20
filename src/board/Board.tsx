@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { findKing, inCheck, legalMoves, megaSquares } from '../chess/standard';
 import { palaceCount } from '../chess/status';
+import { squareRent } from '../chess/rental';
 import { KIND_NAME, fileOf, rankOf, sq, type Piece, type Color, type Move, type MoveInfo, type Position, type PromoKind } from '../chess/types';
 import { cx } from '../components/ui';
 import { PieceArt } from './PieceArt';
@@ -29,6 +30,10 @@ export interface BoardProps {
   holeHidden?: boolean;
   /** Pot-Hole (random duration): show the pothole's turns left as pips. */
   showTurns?: boolean;
+  /** Rental: the player owes rent and taps their own units (not the king) to give them up. */
+  onEvict?: ((sq: number) => void) | null;
+  /** Rental: show each square's rent (base + rise) in its corner. */
+  rentRise?: number | null;
 }
 
 const PROMO_ORDER: PromoKind[] = ['Q', 'R', 'B', 'N'];
@@ -47,11 +52,12 @@ interface Drag {
   wasSelected: boolean;
 }
 
-export function Board({ pos, orientation, canMove, lastMove, showLegal, showLast, onMove, intro = false, fallen = null, drained = false, holeHidden = false, showTurns = false }: BoardProps) {
+export function Board({ pos, orientation, canMove, lastMove, showLegal, showLast, onMove, intro = false, fallen = null, drained = false, holeHidden = false, showTurns = false, onEvict = null, rentRise = null }: BoardProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [selected, setSelected] = useState<number | null>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
-  const [promo, setPromo] = useState<{ from: number; to: number } | null>(null);
+  /** Promotion (choose a piece) or Bario (choose what an undefined Quantum becomes): the choices offered. */
+  const [promo, setPromo] = useState<{ from: number; to: number; kinds: PromoKind[]; field: 'promo' | 'define' } | null>(null);
   const [mkPick, setMkPick] = useState<number | null>(null);
 
   const moves = useMemo(() => (canMove ? legalMoves(pos) : []), [pos, canMove]);
@@ -88,7 +94,10 @@ export function Board({ pos, orientation, canMove, lastMove, showLegal, showLast
   const tryMove = (from: number, to: number) => {
     const options = moves.filter((m) => m.from === from && m.to === to);
     if (options.length === 0) return false;
-    if (options.some((m) => m.promo)) setPromo({ from, to });
+    const defines = [...new Set(options.map((m) => m.define).filter((k): k is PromoKind => !!k))];
+    if (options.some((m) => m.promo)) setPromo({ from, to, kinds: PROMO_ORDER, field: 'promo' });
+    else if (defines.length > 1) setPromo({ from, to, kinds: PROMO_ORDER.filter((k) => defines.includes(k)), field: 'define' });
+    else if (defines.length === 1) onMove({ from, to, define: defines[0] });
     else onMove({ from, to });
     setSelected(null);
     return true;
@@ -98,6 +107,11 @@ export function Board({ pos, orientation, canMove, lastMove, showLegal, showLast
     if (promo || e.button > 0) return;
     const s = squareAt(e.clientX, e.clientY);
     if (s === null || !canMove) return;
+    if (onEvict) {
+      const p = pos.board[s];
+      if (p && p.color === pos.turn && p.kind !== 'K') onEvict(s);
+      return;
+    }
     if (pos.mkRoll) {
       const target = mkTargets.find((m) => megaSquares(m.to).includes(s));
       if (target && mkFrom !== null) {
@@ -170,6 +184,9 @@ export function Board({ pos, orientation, canMove, lastMove, showLegal, showLast
             style={{ left: `${col * 12.5}%`, top: `${row * 12.5}%`, width: '12.5%', height: '12.5%', background: light ? 'var(--sq-light)' : 'var(--sq-dark)' }}
           >
             {isLast && <div className="absolute inset-0 bg-[var(--sq-last)]" />}
+            {rentRise !== null && (
+              <span className={cx('absolute right-[6%] top-[4%] font-mono text-[clamp(7px,1.5cqw,11px)] leading-none', light ? 'text-[var(--sq-dark-ink)]' : 'text-[var(--sq-light)]')}>{squareRent(s) + rentRise}</span>
+            )}
             {checkSq === s && <div className="animate-check-pulse absolute inset-0 bg-[radial-gradient(circle,var(--accent)_0%,color-mix(in_srgb,var(--accent)_55%,transparent)_45%,transparent_72%)]" />}
             {sel === s && <div className="absolute inset-0 bg-[var(--sq-selected)]" />}
             {hoverSquare === s && targets.has(s) && <div className="absolute inset-0 border-[3px] border-navy/70" />}
@@ -234,6 +251,9 @@ export function Board({ pos, orientation, canMove, lastMove, showLegal, showLast
             >
               <PieceArt color={p.color} kind={p.kind} className={cx('h-full w-full', p.status === 'devastated' && 'translate-y-[6%] rotate-[10deg] grayscale', p.status === 'bloodlust' && 'animate-bloodlust')} />
               {p.status && <StatusBadge p={p} />}
+              {/* Bario: a defined Quantum keeps a small mark (it turns back into a Quantum when its cycle ends). */}
+              {p.quantum && p.kind !== 'X' && <span className="absolute left-[4%] top-[4%] flex h-[26%] w-[26%] items-center justify-center rounded-full border-2 border-surface bg-[#7b5cc4] font-display text-[clamp(7px,1.4cqw,11px)] leading-none text-on-accent" title="Quantum">Q</span>}
+              {onEvict && p.color === pos.turn && p.kind !== 'K' && <span className="absolute inset-[6%] animate-check-pulse rounded-full border-[3px] border-dashed border-accent" />}
             </div>
           </div>
         );
@@ -261,10 +281,12 @@ export function Board({ pos, orientation, canMove, lastMove, showLegal, showLast
       {promo && (
         <PromotionPicker
           col={place(promo.to).col}
-          fromTop={place(promo.to).row === 0}
+          fromTop={place(promo.to).row <= 3}
           color={pos.turn}
+          kinds={promo.kinds}
+          label={promo.field === 'promo' ? 'Promote to' : 'Becomes'}
           onPick={(k) => {
-            onMove({ ...promo, promo: k });
+            onMove({ from: promo.from, to: promo.to, [promo.field]: k });
             setPromo(null);
           }}
           onCancel={() => setPromo(null)}
@@ -403,7 +425,7 @@ function toClient(el: HTMLDivElement | null, d: Drag): [number, number] {
   return [r.left + d.x * r.width, r.top + d.y * r.height];
 }
 
-function PromotionPicker({ col, fromTop, color, onPick, onCancel }: { col: number; fromTop: boolean; color: Color; onPick: (k: PromoKind) => void; onCancel: () => void }) {
+function PromotionPicker({ col, fromTop, color, kinds, label, onPick, onCancel }: { col: number; fromTop: boolean; color: Color; kinds: PromoKind[]; label: string; onPick: (k: PromoKind) => void; onCancel: () => void }) {
   return (
     <div
       className="absolute inset-0 z-20 animate-fade bg-navy/35"
@@ -418,8 +440,8 @@ function PromotionPicker({ col, fromTop, color, onPick, onCancel }: { col: numbe
         className={cx('absolute flex w-[12.5%] animate-pop flex-col overflow-hidden rounded-md border-[3px] border-navy bg-surface shadow-pop', !fromTop && 'flex-col-reverse')}
         style={{ left: `${col * 12.5}%`, [fromTop ? 'top' : 'bottom']: 0 }}
       >
-        {PROMO_ORDER.map((k) => (
-          <button key={k} type="button" aria-label={`Promote to ${KIND_NAME[k]}`} className="aspect-square w-full transition hover:bg-raised" onPointerDown={(e) => e.stopPropagation()} onClick={() => onPick(k)}>
+        {kinds.map((k) => (
+          <button key={k} type="button" aria-label={`${label} ${KIND_NAME[k]}`} className="aspect-square w-full transition hover:bg-raised" onPointerDown={(e) => e.stopPropagation()} onClick={() => onPick(k)}>
             <PieceArt color={color} kind={k} className="h-full w-full" />
           </button>
         ))}

@@ -9,8 +9,8 @@ Macro to micro, with a test checkpoint at the end of each stage. Each mode stage
 1. **Foundation and Standard Chess:** the app shell in the Portal style; the board and piece art; click and drag input; the legal-move and last-move highlight settings; the full Standard rules with the section 6 draws; rooms by code, the room setup (mode, time control), random colors and clocks; resign with confirm, draw offers, disconnect forfeit with a reconnect grace period, Rematch and Back to mode pick; the installable app and publishing. **(done)**
 2. **Audio and Standard's effects:** the sound engine, music, and the capture, check and checkmate effects. The effects plan is shown to Caleb before it is built. This sets up how every later mode plugs in its own effects. **(done)**
 3. **Bastille and Pot-Hole.** **(done)**
-4. **Remorse and Mega Knight**, plus the guidebook (Caleb's request). **(this stage)**
-5. **Bario and Rental.**
+4. **Remorse and Mega Knight**, plus the guidebook (Caleb's request). **(done)**
+5. **Bario and Rental.** **(this stage)**
 6. **Revival.**
 7. **Tuning** from Caleb's playtests.
 
@@ -35,6 +35,7 @@ Macro to micro, with a test checkpoint at the end of each stage. Each mode stage
 | Menu music (Stage 3) | A rendition of Caleb's piano piece (MIDI file). |
 | Stage 3 rule questions, effects and music | "Compose everything. For all the other stuff you can decide what to do": the Bastille and Pot-Hole tracks are Claude Code's, and the six rule readings below are Claude Code's calls (revisable). |
 | Stage 4 rule questions, effects and music | "Build stage 4 first with your picks": Claude Code's readings below, its effects proposal and its music. |
+| Stage 5 rule questions, effects and music | "Build stage 4 first with your picks, then stage 5": Claude Code's picks below, its effects and its music. |
 
 ## Questions for Caleb (from Stage 1)
 
@@ -252,6 +253,41 @@ Manuals for both modes, with scenes, are in the guidebook.
 
 - `npm run check:rules` adds 13 Mega Knight checks (blocking, knights, check lines, rolls, crushing, crushed kings, rolling in check, mega knight captures, four-knight formation) and 18 Remorse checks (every roll result, devastated countdown and self-capture, guilt, psychopath extra move and skipping, bloodlust and friendly captures, absolving, a self-captured king).
 - Two-browser run: Mega Knight rolled until a 6 and the mega knight crushed pieces (both screens agree), Remorse captures with the same roll on both screens, and the manual flipbook opened in game. No errors. Frames checked by eye.
+
+
+## Bario and Rental (Stage 5)
+
+### Claude Code's picks (Caleb: "with your picks"; revisable)
+
+| Mode | Question | Choice |
+| --- | --- | --- |
+| Bario | Cycles | Each side's cycle is separate: it ends when that side defines its last undefined Quantum. |
+| Bario | Caps | Counted from the side's defined Quantums of each type on the board in the current cycle; a captured defined piece frees its slot. |
+| Bario | Promotion | The promoted piece is fixed for good (not a Quantum, does not count against the caps); each promotion raises every cap of that side by 1. |
+| Bario | Choosing a type | If a Quantum's move fits more than one available type, a small menu offers them ("Becomes Queen / Bishop"); with one, it is chosen at once. |
+| Bario | Undefined Quantums and the enemy king | They guard squares too: the king cannot step where an available type could attack (the same test as Caleb's check rule). |
+| Bario | Castling | Only with an unmoved undefined Quantum on the rook's square; it becomes a rook (a rook must be available). |
+| Rental | Treasuries | Both shown to both players (a gold box by each player's name); never below 0. |
+| Rental | Rent that cannot be paid | The player taps their own units (not the king) to give them up, one at a time, until the rent can be paid; the clock keeps running. Owing rent with only the king left is bankruptcy. |
+| Rental | Rent rises | Counted from the first move: +1 a square after 5 full rounds, +2 after 10, and so on. |
+| Rental | Check and endings | Normal check and checkmate; stalemate a draw; threefold repetition and the fifty-move rule do not apply; the kings-only rule replaces insufficient material. |
+
+### How it is shown
+
+- Bario: an undefined Quantum is an orb on a pedestal with an orbit ring and a question mark. A defined Quantum is drawn as its piece with a small violet **Q** mark. Defining shows a violet burst and the type's name; a cycle ending sends a violet ripple over every Quantum with the banner "CYCLE RESET".
+- Rental: each square shows its current rent in a corner. After a move, coins fly from the payer's pieces with "RENT −N"; the other player's income arrives as "INCOME +N"; rent rising shows the banner "RENT UP: +N A SQUARE". When rent is owed a bar explains it and the player's units pulse; a unit given up shatters with "EVICTED". "BANKRUPT" and "THE RICHER KING WINS" banners end those games.
+- Sounds: a shimmering morph (define), a falling whoosh (cycle), a cash register (rent), a coin shower (income), a low two-note (rent owed).
+
+### Music
+
+- **Superposition** (Bario): floating and undecided, D major shifting through its neighbours (Dmaj7, Cmaj7#11, Bbmaj7), 96 beats a minute, a glassy triangle lead over arpeggios that never settle.
+- **Landlord** (Rental): a swung jazz walk in F (F, D7, Gm, C7), 116 beats a minute, a walking bass and a bouncy square lead.
+
+## Testing (Stage 5)
+
+- `npm run check:rules` adds 11 Bario checks (moving as a type, caps, promotions raising caps, cycle reset, the check rule and used-up types, castling with a Quantum, insufficient material) and 9 Rental checks (square rents, the first income, rent rises, paying, owing and giving up units, kings-only treasuries, bankruptcy, equal treasuries).
+- Two-browser run: Bario Quantums moving as a knight (chosen at once) and as a bishop (chosen from the menu), the same on both screens; Rental treasuries 48/0 at the start and 24/48 after e4, the same on both screens. Found and fixed: the guest's Quantum moves were sent without the chosen type. No errors.
+- Not tested in the browser: giving up units (tested in the rule checks), and the new music by ear.
 
 ## Testing (Stage 3)
 

@@ -255,6 +255,30 @@ export const sfx = {
     tone(180, { type: 'triangle', to: 60, dur: 1.1, gain: 0.2 });
     noise({ at: 0.6, filter: 'lowpass', hz: 600, dur: 0.4, gain: 0.4 });
   },
+  /** Bario: a Quantum takes its shape, a shimmering morph. */
+  define() {
+    tone(330, { type: 'sine', to: 990, dur: 0.35, gain: 0.12 });
+    notes([79, 86], { type: 'triangle', step: 0.08, dur: 0.3, gain: 0.08, at: 0.2 });
+  },
+  /** Bario: a cycle ends and the Quantums come undone. */
+  cycle() {
+    tone(1200, { type: 'sine', to: 200, dur: 0.8, gain: 0.12 });
+    noise({ filter: 'bandpass', hz: 3000, toHz: 400, dur: 0.8, gain: 0.15 });
+  },
+  /** Rental: rent paid, a cash register. */
+  register() {
+    tone(midiHz(96), { type: 'triangle', dur: 0.35, gain: 0.1 });
+    noise({ filter: 'bandpass', hz: 2500, dur: 0.08, gain: 0.25 });
+    noise({ at: 0.1, filter: 'highpass', hz: 5000, dur: 0.12, gain: 0.12 });
+  },
+  /** Rental: income, a little shower of coins. */
+  coins() {
+    for (let i = 0; i < 6; i++) tone(midiHz(93 + (i % 3) * 2), { at: i * 0.05, type: 'triangle', dur: 0.12, gain: 0.06 });
+  },
+  /** Rental: the rent cannot be paid. */
+  owed() {
+    notes([67, 63], { type: 'square', step: 0.15, dur: 0.22, gain: 0.09 });
+  },
   /** Manual: a page turning (a paper swish). */
   pageTurn() {
     noise({ filter: 'bandpass', hz: 1800, toHz: 4500, q: 0.8, dur: 0.28, gain: 0.22 });
@@ -288,4 +312,4 @@ export const sfx = {
 };
 
 /** Piece values for how hard a capture hits. */
-export const PIECE_VALUE = { P: 1, N: 3, B: 3, R: 5, Q: 9, K: 12 } as const;
+export const PIECE_VALUE = { P: 1, N: 3, B: 3, R: 5, Q: 9, K: 12, X: 4 } as const;

@@ -6,6 +6,7 @@ import { boardEnd, newBoardGame, playMove, repetitionKey, sideCannotMate, type B
 import { formMegaKnights } from '../chess/standard';
 import { rollMega } from '../chess/megaknight';
 import { remorseStep, skipExtra, type RemorseEvent } from '../chess/remorse';
+import { evict, rentalAfterMove, rentalStart, type RentalEvent } from '../chess/rental';
 import { startPosition } from '../chess/standard';
 import { potholeStep, type PotholeDuration, type Rand, type Roll } from '../chess/pothole';
 import { other, sq, type Color, type Move, type MoveInfo, type Position } from '../chess/types';
@@ -34,7 +35,13 @@ export type EndReason =
   /** Bastille: one move emptied both palaces (a draw). */
   | 'palaceBoth'
   /** Mega Knight: a king was crushed. Remorse: a king captured itself, or its own bloodlust piece took it. */
-  | 'kingLost';
+  | 'kingLost'
+  /** Rental: had to give up the king to pay rent. */
+  | 'bankrupt'
+  /** Rental: kings only; the smaller treasury loses. */
+  | 'treasury'
+  /** Rental: kings only with equal treasuries (a draw). */
+  | 'treasuryTie';
 
 export interface Result {
   winner: Color | null;
@@ -56,7 +63,7 @@ export interface ModeOptions {
 
 export const DEFAULT_OPTIONS: ModeOptions = { potholeDuration: 'base' };
 
-const VARIANT: Partial<Record<ModeId, Variant>> = { bastille: 'bastille', pothole: 'pothole', megaknight: 'megaknight', remorse: 'remorse' };
+const VARIANT: Partial<Record<ModeId, Variant>> = { bastille: 'bastille', pothole: 'pothole', megaknight: 'megaknight', remorse: 'remorse', bario: 'bario', rental: 'rental' };
 
 export interface MatchState {
   /** Counts the games in this room, so a view can tell a new game from the last one. */
@@ -79,6 +86,8 @@ export interface MatchState {
   mkRoll: { ply: number; d6: number } | null;
   /** Mega Knight: mega knights formed from four knights by the last move. */
   formed: number[];
+  /** Rental: what the last action did to the money. */
+  rental: RentalEvent | null;
 }
 
 /** What both screens show. Clock times are as of the moment the view was made. */
@@ -97,6 +106,7 @@ export interface GameView {
   remorse: RemorseEvent | null;
   mkRoll: { ply: number; d6: number } | null;
   formed: number[];
+  rental: RentalEvent | null;
   /** A player who lost connection, and how long they have to come back. */
   away: { color: Color; msLeft: number } | null;
 }
@@ -118,6 +128,7 @@ export function newMatch(number: number, mode: ModeId, time: TimeControl, hostCo
     remorse: null,
     mkRoll: null,
     formed: [],
+    rental: null,
   };
 }
 
@@ -125,6 +136,12 @@ export function newMatch(number: number, mode: ModeId, time: TimeControl, hostCo
 function startFor(mode: ModeId): Position {
   const pos = startPosition(VARIANT[mode] ?? 'standard');
   if (mode === 'megaknight') return { ...pos, mk: [sq(3, 3)] };
+  if (mode === 'bario') {
+    // A king, 8 pawns and 7 undefined Quantums where the queen, rooks, bishops and knights would stand.
+    const board = pos.board.map((p) => (p && p.kind !== 'K' && p.kind !== 'P' ? { ...p, kind: 'X' as const, quantum: true } : p));
+    return { ...pos, board, bario: { promos: { w: 0, b: 0 }, cycles: { w: 0, b: 0 } } };
+  }
+  if (mode === 'rental') return rentalStart(pos);
   return pos;
 }
 
@@ -182,7 +199,7 @@ function takeTurn(m: MatchState, color: Color, reported: number | null, now: num
   }
   // A draw offer stays open until the player it was made to moves (or answers it).
   const drawOffer = m.drawOffer && m.drawOffer !== color ? null : m.drawOffer;
-  const next: MatchState = { ...m, game, clock, drawOffer, roll: null, remorse: null, mkRoll: null, formed: [], ...done.patch };
+  const next: MatchState = { ...m, game, clock, drawOffer, roll: null, remorse: null, mkRoll: null, formed: [], rental: null, ...done.patch };
   if (game.end) {
     const e = game.end;
     return end(next, 'winner' in e ? { winner: e.winner, reason: e.reason } : { winner: null, reason: e.reason }, now);
@@ -202,6 +219,7 @@ export function moveIn(m: MatchState, color: Color, move: Move, reported: number
     let roll: Roll | null = null;
     let remorse: RemorseEvent | null = null;
     let formed: number[] = [];
+    let rental: RentalEvent | null = null;
     let after: ((pos: Position, mi: MoveInfo, prev: Position) => Position) | undefined;
     // Pot-Hole: the host rolls the dice within the turn, after the move.
     if (variant === 'pothole' && rand)
@@ -224,9 +242,28 @@ export function moveIn(m: MatchState, color: Color, move: Move, reported: number
         remorse = r.ev;
         return r.pos;
       };
+    // Rental: pay rent after the move (or owe it), then the other player's income.
+    if (variant === 'rental')
+      after = (pos, _mi, prev) => {
+        const r = rentalAfterMove(prev, pos);
+        rental = r.ev;
+        return r.pos;
+      };
     const game = playMove(g, move, after);
     if (!game) return null;
-    return { game, patch: { roll, remorse, formed } };
+    return { game, patch: { roll, remorse, formed, rental } };
+  });
+}
+
+/** Rental: the player gives up a unit toward the rent they owe. */
+export function evictIn(m: MatchState, color: Color, sqr: number, reported: number | null, now: number): MatchState | null {
+  if (m.game.pos.variant !== 'rental' || m.game.pos.rental?.owed === null) return null;
+  return takeTurn(m, color, reported, now, (g) => {
+    const r = evict(g.pos, sqr);
+    if (!r) return null;
+    const game: BoardGame = { pos: r.pos, seen: g.seen, lastMove: g.lastMove, end: null };
+    game.end = boardEnd(game);
+    return { game, patch: { rental: r.ev } };
   });
 }
 
@@ -299,6 +336,7 @@ export function viewOf(m: MatchState, now: number, away: GameView['away']): Game
     remorse: m.remorse,
     mkRoll: m.mkRoll,
     formed: m.formed,
+    rental: m.rental,
     away,
   };
 }
@@ -321,4 +359,7 @@ export const RESULT_TEXT: Record<EndReason, string> = {
   palace: 'Palace emptied',
   palaceBoth: 'Both palaces emptied',
   kingLost: 'King lost',
+  bankrupt: 'Bankrupt',
+  treasury: 'Kings only: the richer king wins',
+  treasuryTie: 'Kings only, equal treasuries',
 };

@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
-import { BookOpen, Check, Dices, Flag, Zap, Handshake, Loader2, LogOut, Play, RefreshCw, Swords, UserRound, WifiOff } from 'lucide-react';
+import { BookOpen, Check, Coins, Dices, Flag, Zap, Handshake, Loader2, LogOut, Play, RefreshCw, Swords, UserRound, WifiOff } from 'lucide-react';
 import { Board } from '../board/Board';
 import { useGameManual } from '../guide/Guide';
 import { EffectsLayer } from '../effects/EffectsLayer';
@@ -15,13 +15,15 @@ import { PageLayout, PageTitle, PlayLayout } from '../components/Layout';
 import { RoomCodeCard, useLeaveOnUnmount } from '../components/RoomBits';
 import { confirmDialog, notify } from '../components/dialogs';
 import { Button, ButtonLink, Card, Chip, Segmented, Spinner, cx } from '../components/ui';
-import { RESULT_TEXT, type GameView, type Result } from '../game/match';
+import { RESULT_TEXT, plyOf, type GameView, type Result } from '../game/match';
+import { rentRise } from '../chess/rental';
 import {
   backToSetup,
   clearNotice,
   gameInProgress,
   leaveRoom,
   playerAction,
+  playerEvict,
   playerDraw,
   playerMove,
   playerResign,
@@ -364,12 +366,14 @@ function GameScreen({ s, game, onLeave }: { s: RoomScreen; game: GameView; onLea
       drained={drained}
       holeHidden={holeHidden}
       showTurns={game.options.potholeDuration === 'random'}
+      onEvict={game.pos.rental?.owed !== null && game.pos.rental?.owed !== undefined && game.pos.turn === me && !over ? playerEvict : null}
+      rentRise={game.pos.rental ? rentRise(Math.floor(plyOf(game.pos) / 2)) : null}
     />
   );
   const opponentBar = (
-    <PlayerBar color={them} mine={false} clock={clockOf(them)} toMove={!over && game.pos.turn === them} note={opponentNote(s, game, them, elapsed)} cracked={flagged === them} />
+    <PlayerBar color={them} mine={false} clock={clockOf(them)} toMove={!over && game.pos.turn === them} note={opponentNote(s, game, them, elapsed)} cracked={flagged === them} money={game.pos.rental?.treasury[them] ?? null} />
   );
-  const myBar = <PlayerBar color={me} mine clock={clockOf(me)} toMove={!over && game.pos.turn === me} note={myNote(s, game, me)} cracked={flagged === me} />;
+  const myBar = <PlayerBar color={me} mine clock={clockOf(me)} toMove={!over && game.pos.turn === me} note={myNote(s, game, me)} cracked={flagged === me} money={game.pos.rental?.treasury[me] ?? null} />;
   const lower = over ? <ResultPanel s={s} game={game} me={me} onLeave={onLeave} onGuide={openGuide} /> : <Actions s={s} game={game} me={me} onLeave={onLeave} onGuide={openGuide} />;
 
   return (
@@ -442,7 +446,7 @@ function myNote(s: RoomScreen, game: GameView, me: Color): ReactNode {
   return game.pos.turn === me ? <span className="text-accent">Your move</span> : null;
 }
 
-function PlayerBar({ color, mine, clock, toMove, note, cracked = false }: { color: Color; mine: boolean; clock: number | null; toMove: boolean; note: ReactNode; cracked?: boolean }) {
+function PlayerBar({ color, mine, clock, toMove, note, cracked = false, money = null }: { color: Color; mine: boolean; clock: number | null; toMove: boolean; note: ReactNode; cracked?: boolean; money?: number | null }) {
   const low = clock !== null && clock < 10_000;
   return (
     <div className={cx('flex items-center gap-3 rounded-xl border-2 bg-surface px-3 py-2', mine ? 'border-navy' : 'border-line')}>
@@ -454,6 +458,12 @@ function PlayerBar({ color, mine, clock, toMove, note, cracked = false }: { colo
         <p className="font-display text-xl uppercase leading-none">{mine ? `You are ${COLOR_NAME[color]}` : `Opponent · ${COLOR_NAME[color]}`}</p>
         <p className="mt-1 h-4 truncate text-xs text-muted">{note}</p>
       </div>
+      {/* Rental: the treasury. */}
+      {money !== null && (
+        <span data-treasury={color} className="shrink-0 rounded-lg border-2 border-[#c9a227] bg-[#fff4cf] px-2 py-1 font-mono text-base font-semibold tabular-nums text-ink" title="Treasury">
+          ¤{money}
+        </span>
+      )}
       {clock !== null && (
         <span
           className={cx(
@@ -495,6 +505,15 @@ function Actions({ s, game, me, onLeave, onGuide }: { s: RoomScreen; game: GameV
               Roll
             </Button>
           )}
+        </div>
+      )}
+      {/* Rental: rent the player cannot pay; they give up units until they can. */}
+      {variant === 'rental' && game.pos.rental?.owed !== null && game.pos.rental?.owed !== undefined && game.pos.turn === me && (
+        <div className="flex animate-rise items-center gap-2 rounded-xl border-2 border-accent bg-surface px-3 py-2">
+          <Coins className="size-5 shrink-0 text-accent" />
+          <span className="flex-1 text-sm">
+            Rent due ¤{game.pos.rental.owed}, you have ¤{game.pos.rental.treasury[me]}. Tap your units to give them up until you can pay. Giving up your king is bankruptcy.
+          </span>
         </div>
       )}
       {/* Remorse: a psychopath's extra move. */}
@@ -564,6 +583,12 @@ function resultLine(r: Result, me: Color, game: GameView) {
       return loser === me ? 'Your palace is empty.' : 'Your opponent’s palace is empty.';
     case 'palaceBoth':
       return 'One move emptied both palaces.';
+    case 'bankrupt':
+      return `${who} went bankrupt: the king had to go to pay the rent.`;
+    case 'treasury':
+      return `Only kings are left; ${r.winner === me ? 'your' : 'your opponent’s'} treasury is bigger.`;
+    case 'treasuryTie':
+      return 'Only kings are left, with equal treasuries.';
     case 'kingLost':
       return `${loser === me ? 'Your' : 'Your opponent’s'} king is gone${game.mode === 'megaknight' ? ': crushed by a mega knight' : ''}.`;
     default:

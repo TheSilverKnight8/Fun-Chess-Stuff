@@ -7,7 +7,7 @@ import { getAudio, whenAudioStarts } from './engine';
 // A game track can have a tension layer that fades in while a king is in check
 // or a clock is low (setTension).
 
-export type TrackId = 'menu' | 'standard' | 'bastille' | 'pothole' | 'megaknight' | 'remorse';
+export type TrackId = 'menu' | 'standard' | 'bastille' | 'pothole' | 'megaknight' | 'remorse' | 'bario' | 'rental';
 
 interface Track {
   bpm: number;
@@ -202,7 +202,77 @@ const remorse: Track = {
   },
 };
 
-const TRACKS: Record<TrackId, Track> = { menu, standard, bastille, pothole, megaknight, remorse };
+// "Superposition" (Bario): floating and undecided, shifting between D major and
+// its whole-tone neighbours (Dmaj7, Cmaj7#11, Bbmaj7, Cmaj7), a glassy triangle
+// lead over arpeggios that never settle. Tension: a ticking hat and a square arpeggio.
+const dmaj7 = [62, 66, 69, 73];
+const cmaj7 = [60, 64, 66, 71];
+const bbmaj7 = [58, 62, 65, 69];
+const bario: Track = {
+  bpm: 96,
+  leadType: 'triangle',
+  lead: [
+    ...bar(78, 0, 0, 76, 73, 0, 0, 0),
+    ...bar(76, 0, 0, 78, 79, 0, 0, 0),
+    ...bar(77, 0, 0, 74, 70, 0, 0, 0),
+    ...bar(71, 0, 74, 0, 78, 0, 76, 0),
+    ...bar(81, 0, 0, 78, 76, 0, 73, 0),
+    ...bar(79, 0, 0, 78, 76, 0, 71, 0),
+    ...bar(74, 0, 77, 0, 81, 0, 79, 77),
+    ...bar(76, 0, 0, 0, 72, 0, 74, 0),
+  ],
+  bass: [38, 36, 34, 36, 38, 36, 34, 36].flatMap((r) => bar(r, 0, 0, 0, r + 7, 0, 0, 0)),
+  chords: [dmaj7, cmaj7, bbmaj7, cmaj7, dmaj7, cmaj7, bbmaj7, cmaj7].flatMap((ch) => [ch.slice(0, 3), null, null, null, null, null, ch.slice(1), null]),
+  drums: rep(['k...h..s'], 8).join(''),
+  tension: {
+    drums: rep(['hshhhshh'], 8).join(''),
+    arp: [dmaj7, cmaj7, bbmaj7, cmaj7, dmaj7, cmaj7, bbmaj7, cmaj7].flatMap((ch) => [ch[0] + 12, ch[1] + 12, ch[2] + 12, ch[3] + 12, ch[2] + 12, ch[1] + 12, ch[3], ch[2]]),
+    arpType: 'square',
+  },
+};
+
+// "Landlord" (Rental Chess): a swung, counting-the-money jazz walk in F
+// (F, D7, Gm, C7), a walking bass and a bouncy square lead. Tension: a
+// cash-register hi-hat and a sawtooth arpeggio.
+const fM = [57, 60, 65];
+const d7 = [57, 60, 66];
+const gm7 = [58, 62, 65];
+const c7 = [58, 60, 64];
+const rental: Track = {
+  bpm: 116,
+  swing: 0.3,
+  leadType: 'square',
+  lead: [
+    ...bar(72, 0, 69, 72, 77, 0, 76, 0),
+    ...bar(74, 0, 72, 69, 66, 0, 69, 0),
+    ...bar(70, 0, 74, 77, 79, 0, 77, 74),
+    ...bar(76, 0, 0, 72, 70, 0, 67, 0),
+    ...bar(72, 0, 69, 72, 77, 0, 81, 0),
+    ...bar(78, 0, 74, 72, 69, 0, 66, 0),
+    ...bar(67, 0, 70, 74, 76, 0, 79, 0),
+    ...bar(77, 0, 0, 0, 65, 0, 0, 0),
+  ],
+  // A walking bass: four notes a bar.
+  bass: [
+    ...bar(41, 0, 45, 0, 48, 0, 50, 0),
+    ...bar(38, 0, 42, 0, 45, 0, 48, 0),
+    ...bar(43, 0, 46, 0, 50, 0, 46, 0),
+    ...bar(36, 0, 40, 0, 43, 0, 40, 0),
+    ...bar(41, 0, 45, 0, 48, 0, 45, 0),
+    ...bar(38, 0, 42, 0, 45, 0, 42, 0),
+    ...bar(43, 0, 46, 0, 48, 0, 40, 0),
+    ...bar(41, 0, 48, 0, 41, 0, 0, 0),
+  ],
+  chords: [fM, d7, gm7, c7, fM, d7, gm7, c7].flatMap((ch) => [null, ch, null, ch, null, ch, null, ch]),
+  drums: rep(['k.hsk.hs'], 8).join(''),
+  tension: {
+    drums: rep(['hhshhhsh'], 8).join(''),
+    arp: [fM, d7, gm7, c7, fM, d7, gm7, c7].flatMap((ch) => [ch[0] + 12, ch[1] + 12, ch[2] + 12, ch[1] + 12, ch[0] + 24, ch[2] + 12, ch[1] + 12, ch[0] + 12]),
+    arpType: 'sawtooth',
+  },
+};
+
+const TRACKS: Record<TrackId, Track> = { menu, standard, bastille, pothole, megaknight, remorse, bario, rental };
 
 const midiHz = (m: number) => 440 * 2 ** ((m - 69) / 12);
 const LOOKAHEAD = 0.2;

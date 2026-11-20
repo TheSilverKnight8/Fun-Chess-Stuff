@@ -25,6 +25,8 @@ interface Seen {
   /** Mega Knight's last roll and Remorse's last event shown (keys). */
   mkKey: string;
   remorseKey: string;
+  rentalKey: string;
+  cycles: string;
   /** Remorse: an extra move was waiting (so the next move is the extra move). */
   extra: boolean;
 }
@@ -53,6 +55,8 @@ export function useGameFx(game: GameView, me: Color, reconnecting: boolean) {
     const now: Seen = { number: game.number, ply, ended: !!game.result, offer: game.drawOffer, away: !!game.away, reconnecting, rollPly: game.roll?.ply ?? -1,
       mkKey: game.mkRoll ? `${game.mkRoll.ply}:${game.mkRoll.d6}` : '',
       remorseKey: game.remorse ? JSON.stringify(game.remorse) : '',
+      rentalKey: game.rental ? JSON.stringify(game.rental) : '',
+      cycles: game.pos.bario ? `${game.pos.bario.cycles.w}.${game.pos.bario.cycles.b}` : '',
       extra: game.pos.extra !== null && game.pos.extra !== undefined,
     };
     seen.current = now;
@@ -82,6 +86,7 @@ export function useGameFx(game: GameView, me: Color, reconnecting: boolean) {
       else if (m.castle) later(SLIDE_MS - 10, () => sfx.castle());
       else if (!m.mk) later(SLIDE_MS - 10, () => sfx.move());
       if (m.promo) later(SLIDE_MS + 20, () => sfx.promote());
+      if (m.define) later(SLIDE_MS + 20, () => sfx.define());
       if (checking.length && !mate) later(SLIDE_MS + 60, () => sfx.check());
     }
 
@@ -135,6 +140,8 @@ export function useGameFx(game: GameView, me: Color, reconnecting: boolean) {
           if (won) sfx.fanfare();
           else sfx.mateLost();
         });
+      } else if (r.reason === 'bankrupt' || r.reason === 'treasury') {
+        later(d + 700, () => (won ? sfx.fanfare() : sfx.mateLost()));
       } else if (r.reason === 'palace' || r.reason === 'palaceBoth') {
         later(d, () => {
           sfx.crumble();
@@ -166,6 +173,24 @@ export function useGameFx(game: GameView, me: Color, reconnecting: boolean) {
       } else if (ev.bloodlust) later(SLIDE_MS + 300, () => sfx.status('bloodlust'));
       if (ev.absolved.length) later(SLIDE_MS + 100, () => sfx.halo());
       if (ev.selfCaptured.length) later(250, () => sfx.collapse());
+    }
+
+    // Bario: a cycle ended.
+    if (!newGame && prev && now.cycles && now.cycles !== prev.cycles) {
+      const squares = game.pos.board.flatMap((p, i) => (p?.quantum ? [i] : []));
+      emitFx({ t: 'cycle', squares });
+      later(SLIDE_MS + 350, () => sfx.cycle());
+    }
+    // Rental: rent, income, rent owed, a unit given up.
+    if (!newGame && prev && now.rentalKey && now.rentalKey !== prev.rentalKey && game.rental) {
+      const ev = game.rental;
+      const payer = ev.paid?.color ?? (ev.owed !== null ? game.pos.turn : null);
+      const squares = payer ? game.pos.board.flatMap((p, i) => (p?.color === payer ? [i] : [])) : [];
+      emitFx({ t: 'rental', ev, me, squares, payer });
+      if (ev.evicted) later(60, () => sfx.capture(PIECE_VALUE[ev.evicted!.piece.kind]));
+      if (ev.paid) later(SLIDE_MS + 120, () => sfx.register());
+      if (ev.owed !== null) later(SLIDE_MS + 120, () => sfx.owed());
+      if (ev.income) later(SLIDE_MS + 650, () => sfx.coins());
     }
 
     // Small sounds.

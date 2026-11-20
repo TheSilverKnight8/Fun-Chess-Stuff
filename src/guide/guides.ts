@@ -299,5 +299,77 @@ export const GUIDES: Partial<Record<ModeId, GuideSection[]>> = {
     CLOCKS,
     ...PIECES,
   ],
+
+  bario: [
+    {
+      title: 'Quantum pieces',
+      text: [
+        'Each side has a king, eight pawns, and seven undefined Quantum pieces where the queen, rooks, bishops and knights would be.',
+        'A Quantum chooses what it is (queen, rook, bishop or knight) on its move, by moving as that piece, and stays that until its cycle ends. If a move fits more than one type, you pick from a small menu.',
+      ],
+      scene: { setup: ['wXa1', 'wXb1', 'wXc1', 'wXd1', 'wKe1', 'wXf1', 'wXg1', 'wXh1', 'wPd2', 'wPe2', 'bKe8'], ranks: [1, 4], steps: [{ t: 'move', from: 'g1', to: 'f3', promo: 'N' }, { t: 'caption', text: 'This Quantum moved as a knight: it is a knight now.' }] },
+    },
+    {
+      title: 'One set per cycle',
+      text: [
+        'Each side can define one standard set per cycle: 1 queen, 2 rooks, 2 bishops, 2 knights. A type is available while it is not used up (a defined piece that is captured frees its slot).',
+        'A cycle ends when your last undefined Quantum is defined: then all your defined Quantums turn back into undefined Quantums and a new cycle begins.',
+      ],
+      scene: { setup: ['wNc3', 'wNf3', 'wXb1', 'wKe1', 'bKe8'], ranks: [1, 4], steps: [{ t: 'caption', text: 'Both knights are used this cycle, so b1 cannot become a knight.' }, { t: 'move', from: 'b1', to: 'b4', promo: 'R' }, { t: 'caption', text: 'It became a rook. That was the last undefined Quantum: cycle over.' }, { t: 'remove', sq: 'b4' }, { t: 'add', piece: 'wXb4' }, { t: 'remove', sq: 'c3' }, { t: 'add', piece: 'wXc3' }, { t: 'remove', sq: 'f3' }, { t: 'add', piece: 'wXf3' }] },
+    },
+    {
+      title: 'Check',
+      text: ['The goal is checkmate. An undefined Quantum gives check if any type still available to it could attack the king, and the king must answer it like any threat. It also guards those squares from the enemy king.'],
+      scene: { setup: ['wXe1', 'wKg1', 'bKe8'], steps: [{ t: 'mark', squares: ['e8'], tone: 'danger' }, { t: 'caption', text: 'A rook or queen is still available: the Quantum on e1 gives check.' }] },
+    },
+    {
+      title: 'Promotion, castling, en passant',
+      text: [
+        'A pawn can promote to anything (queen, rook, bishop or knight). It is a fixed piece, not a Quantum, and every promotion raises the cap of every type by 1 for that side.',
+        'Castling is allowed with an unmoved undefined Quantum on the rook’s square, which turns into a rook (a rook must be available). En passant: pawns only, as usual.',
+      ],
+    },
+    {
+      title: 'Draws',
+      text: ['Stalemate, threefold repetition (defined and undefined pieces and the cycles count) and the fifty-move rule. Insufficient material only for king against king, since a Quantum could become anything.'],
+    },
+    CLOCKS,
+    ...PIECES,
+  ],
+
+  rental: [
+    {
+      title: 'The money',
+      text: [
+        'Orthodox chess with a treasury each. Every turn, in order: you receive income (3 for each of your units, king included), you make a legal move, then you pay rent for the squares your pieces stand on.',
+        'White receives 48 before the first move. Treasuries show beside each player.',
+      ],
+    },
+    {
+      title: 'Rent',
+      text: [
+        'Edge squares cost 1, the centre four (d4, e4, d5, e5) cost 4, all others 2. Each square shows its rent in its corner.',
+        'Every 5 full rounds (both players have moved) the rent on every square goes up by 1, and keeps adding up (+1 after 5 rounds, +2 after 10, and so on). Income never goes up.',
+      ],
+      scene: { setup: ['wKe1', 'wPe2', 'bKe8'], ranks: [1, 5], steps: [{ t: 'move', from: 'e2', to: 'e4' }, { t: 'mark', squares: ['e4'], tone: 'danger' }, { t: 'caption', text: 'e4 is a centre square: 4 a turn.' }] },
+    },
+    {
+      title: 'Can’t pay?',
+      text: [
+        'If you cannot pay the rent, you give up units of your choice, one at a time (tap them), until you can.',
+        'If you would have to give up your king, you are bankrupt and lose.',
+      ],
+      scene: { setup: ['wKe1', 'wQd4', 'wNb1', 'bKe8'], ranks: [1, 5], steps: [{ t: 'caption', text: 'Rent due 9, treasury 5.' }, { t: 'mark', squares: ['d4', 'b1'], tone: 'danger' }, { t: 'remove', sq: 'd4' }, { t: 'caption', text: 'The queen goes; now the rent can be paid.' }] },
+    },
+    {
+      title: 'Endings',
+      text: [
+        'Checkmate wins and stalemate is a draw, as usual. Threefold repetition and the fifty-move rule do not apply.',
+        'When only the two kings are left, the game ends at once (after that turn’s rent): the smaller treasury loses. Equal treasuries are a draw.',
+      ],
+    },
+    CLOCKS,
+    ...PIECES,
+  ],
 };
 

@@ -7,6 +7,7 @@ import type { Color, MoveInfo, Position } from '../chess/types';
 import type { Result } from '../game/match';
 import type { Roll } from '../chess/pothole';
 import type { RemorseEvent } from '../chess/remorse';
+import type { RentalEvent } from '../chess/rental';
 
 export type FxEvent =
   | { t: 'start' }
@@ -26,6 +27,10 @@ export type FxEvent =
   | { t: 'mkroll'; d6: number }
   | { t: 'formed'; anchors: number[] }
   | { t: 'remorse'; ev: RemorseEvent }
+  /** Bario: a side's cycle ended; these squares' Quantums turned undefined again. */
+  | { t: 'cycle'; squares: number[] }
+  /** Rental: money moved. `me` tells which side of the board is whose. */
+  | { t: 'rental'; ev: RentalEvent; me: Color; squares: number[]; payer: Color | null }
   | { t: 'roll'; roll: Roll }
   | { t: 'end'; result: Result; pos: Position; me: Color; afterMove: boolean; extraDelay: number };
 

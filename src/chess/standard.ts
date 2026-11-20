@@ -15,6 +15,7 @@ import {
   type MoveInfo,
   type Piece,
   type Position,
+  type PromoKind,
   type Variant,
 } from './types';
 
@@ -93,7 +94,9 @@ export function findKing(pos: Position, color: Color): number {
 }
 
 /** Is square `target` attacked by any piece of color `by`? */
-export function isAttacked(board: (Piece | null)[], target: number, by: Color, hole: Block = null): boolean {
+export function isAttacked(board: (Piece | null)[], target: number, by: Color, hole: Block = null, qa: Set<PromoKind> | null = null): boolean {
+  // Bario: an undefined Quantum attacks as any type still available to its side (Caleb's check rule).
+  const q = (k: 'N' | 'R' | 'B') => !!qa && (qa.has(k) || (k !== 'N' && qa.has('Q')));
   const tf = fileOf(target);
   const tr = rankOf(target);
   // Pawns: a white pawn attacks up the board, so look one rank down from the target.
@@ -110,7 +113,7 @@ export function isAttacked(board: (Piece | null)[], target: number, by: Color, h
     const r = tr + dr;
     if (onBoard(f, r)) {
       const p = board[sq(f, r)];
-      if (p && p.color === by && p.kind === 'N' && givesCheck(p)) return true;
+      if (p && p.color === by && (p.kind === 'N' || (p.kind === 'X' && q('N'))) && givesCheck(p)) return true;
     }
   }
   for (const [df, dr] of KING_STEPS) {
@@ -121,12 +124,12 @@ export function isAttacked(board: (Piece | null)[], target: number, by: Color, h
       if (p && p.color === by && p.kind === 'K' && givesCheck(p)) return true;
     }
   }
-  if (slides(board, tf, tr, ROOK_DIRS, by, 'R', hole)) return true;
-  if (slides(board, tf, tr, BISHOP_DIRS, by, 'B', hole)) return true;
+  if (slides(board, tf, tr, ROOK_DIRS, by, 'R', hole, q('R'))) return true;
+  if (slides(board, tf, tr, BISHOP_DIRS, by, 'B', hole, q('B'))) return true;
   return false;
 }
 
-function slides(board: (Piece | null)[], tf: number, tr: number, dirs: readonly (readonly [number, number])[], by: Color, kind: 'R' | 'B', hole: Block) {
+function slides(board: (Piece | null)[], tf: number, tr: number, dirs: readonly (readonly [number, number])[], by: Color, kind: 'R' | 'B', hole: Block, quantum = false) {
   for (const [df, dr] of dirs) {
     let f = tf + df;
     let r = tr + dr;
@@ -135,7 +138,7 @@ function slides(board: (Piece | null)[], tf: number, tr: number, dirs: readonly 
       if (hole?.has(sq(f, r))) break;
       const p = board[sq(f, r)];
       if (p) {
-        if (p.color === by && (p.kind === kind || p.kind === 'Q') && givesCheck(p)) return true;
+        if (p.color === by && (p.kind === kind || p.kind === 'Q' || (quantum && p.kind === 'X')) && givesCheck(p)) return true;
         break;
       }
       f += df;
@@ -146,9 +149,17 @@ function slides(board: (Piece | null)[], tf: number, tr: number, dirs: readonly 
 }
 
 /** Does the piece on `from` attack `target`? */
-export function attacks(board: (Piece | null)[], from: number, target: number, hole: Block = null): boolean {
+export function attacks(board: (Piece | null)[], from: number, target: number, hole: Block = null, qa: Set<PromoKind> | null = null): boolean {
   const p = board[from];
   if (!p || from === target) return false;
+  if (p.kind === 'X') {
+    if (!qa) return false;
+    const b2 = board.slice();
+    return [...qa].some((k) => {
+      b2[from] = { ...p, kind: k };
+      return attacks(b2, from, target, hole);
+    });
+  }
   const df = fileOf(target) - fileOf(from);
   const dr = rankOf(target) - rankOf(from);
   switch (p.kind) {
@@ -183,7 +194,7 @@ export function checkers(pos: Position): number[] {
   const out: number[] = [];
   for (let s = 0; s < 64; s++) {
     const p = pos.board[s];
-    if (p && p.color !== pos.turn && attacks(pos.board, s, k, holeOf(pos))) out.push(s);
+    if (p && p.color !== pos.turn && givesCheck(p) && attacks(pos.board, s, k, holeOf(pos), quantumAvail(pos, p.color))) out.push(s);
   }
   return out;
 }
@@ -210,7 +221,23 @@ export const royal = (pos: Position) => pos.variant !== 'bastille';
 export function inCheck(pos: Position, color: Color = pos.turn): boolean {
   if (!royal(pos)) return false;
   const k = findKing(pos, color);
-  return k >= 0 && isAttacked(pos.board, k, other(color), holeOf(pos));
+  return k >= 0 && isAttacked(pos.board, k, other(color), holeOf(pos), quantumAvail(pos, other(color)));
+}
+
+/** Bario: one standard set per cycle (1 queen, 2 rooks, 2 bishops, 2 knights), each cap raised by 1 per promotion of that side (Caleb). */
+const BARIO_SET: Record<PromoKind, number> = { Q: 1, R: 2, B: 2, N: 2 };
+
+/**
+ * Bario: the types an undefined Quantum of this side may still become: those
+ * not used up in the current cycle (Caleb). A defined Quantum on the board uses
+ * its type's slot; a captured one frees it (Claude Code's reading). Null outside Bario.
+ */
+export function quantumAvail(pos: Position, c: Color): Set<PromoKind> | null {
+  if (pos.variant !== 'bario') return null;
+  const used: Record<PromoKind, number> = { Q: 0, R: 0, B: 0, N: 0 };
+  for (const p of pos.board) if (p && p.color === c && p.quantum && p.kind !== 'X') used[p.kind as PromoKind]++;
+  const extra = pos.bario?.promos[c] ?? 0;
+  return new Set(PROMO_KINDS.filter((k) => used[k] < BARIO_SET[k] + extra));
 }
 
 /** Moves that follow the pieces' movement rules, before checking that the own king is safe. */
@@ -295,6 +322,41 @@ function pseudoMoves(pos: Position): MoveInfo[] {
       continue;
     }
 
+    // Bario: an undefined Quantum moves as any available type, becoming it (one move per type, like promotion choices).
+    if (p.kind === 'X') {
+      for (const k of quantumAvail(pos, turn) ?? []) {
+        const steps = k === 'N' ? KNIGHT_STEPS : null;
+        if (steps) {
+          for (const [df, dr] of steps) {
+            const f = f0 + df;
+            const r = r0 + dr;
+            if (!onBoard(f, r)) continue;
+            const to = sq(f, r);
+            const target = board[to];
+            if (!target || takes(p, target)) add(from, to, { define: k });
+          }
+          continue;
+        }
+        for (const [df, dr] of k === 'R' ? ROOK_DIRS : k === 'B' ? BISHOP_DIRS : [...ROOK_DIRS, ...BISHOP_DIRS]) {
+          let f = f0 + df;
+          let r = r0 + dr;
+          while (onBoard(f, r)) {
+            const to = sq(f, r);
+            if (hole?.has(to)) break;
+            const target = board[to];
+            if (target) {
+              if (takes(p, target)) add(from, to, { define: k });
+              break;
+            }
+            add(from, to, { define: k });
+            f += df;
+            r += dr;
+          }
+        }
+      }
+      continue;
+    }
+
     const dirs = p.kind === 'R' ? ROOK_DIRS : p.kind === 'B' ? BISHOP_DIRS : [...ROOK_DIRS, ...BISHOP_DIRS];
     for (const [df, dr] of dirs) {
       let f = f0 + df;
@@ -331,29 +393,35 @@ function castleMoves(pos: Position, from: number, add: (from: number, to: number
   if (!rights.k && !rights.q) return;
   const enemy = other(c);
   const hole = holeOf(pos);
-  const att = (s: number) => isAttacked(pos.board, s, enemy, hole);
+  const qa = quantumAvail(pos, enemy);
+  const att = (s: number) => isAttacked(pos.board, s, enemy, hole, qa);
   if (att(from)) return;
+  // Bario: castling with an undefined Quantum on the rook's square, which becomes a rook (Caleb; it must still be available).
+  const mine = quantumAvail(pos, c);
   const r = rankOf(from);
   const clear = (...files: number[]) => files.every((f) => !pos.board[sq(f, r)] && !hole?.has(sq(f, r)));
   const rookOk = (s: number) => {
     const p = pos.board[s];
-    return !!p && p.kind === 'R' && p.color === c;
+    return !!p && p.color === c && (p.kind === 'R' ? !p.quantum || pos.variant !== 'bario' : p.kind === 'X' && !!mine?.has('R'));
   };
+  const rookDef = (s: number) => (pos.board[s]?.kind === 'X' ? ({ define: 'R' } as const) : {});
   if (rights.k && rookOk(ROOK_HOME[c].k)) {
     const f1 = sq(5, r);
     const g1 = sq(6, r);
-    if (clear(5, 6) && !att(f1) && !att(g1)) add(from, g1, { castle: 'k' });
+    if (clear(5, 6) && !att(f1) && !att(g1)) add(from, g1, { castle: 'k', ...rookDef(ROOK_HOME[c].k) });
   }
   if (rights.q && rookOk(ROOK_HOME[c].q)) {
     const d1 = sq(3, r);
     const c1 = sq(2, r);
-    if (clear(1, 2, 3) && !att(d1) && !att(c1)) add(from, c1, { castle: 'q' });
+    if (clear(1, 2, 3) && !att(d1) && !att(c1)) add(from, c1, { castle: 'q', ...rookDef(ROOK_HOME[c].q) });
   }
 }
 
 /** Every legal move for the side to move. */
 export function legalMoves(pos: Position): MoveInfo[] {
   const mover = pos.turn;
+  // Rental: while rent is owed the player gives up units instead of moving.
+  if (pos.rental && pos.rental.owed !== null) return [];
   // Mega Knight: after rolling a 6, the turn's move is a mega knight move.
   if (pos.mkRoll) return megaMoves(pos).filter((m) => !inCheck(play(pos, m), mover));
   // Bastille: no royal pieces, so no check: every move that follows the pieces' rules is legal.
@@ -372,8 +440,10 @@ export function play(pos: Position, m: MoveInfo): Position {
   if (m.captureSq !== null) board[m.captureSq] = null;
   let moving = board[m.from]!;
   board[m.from] = null;
-  // Remorse: a promoted pawn keeps its status (Claude Code's reading).
+  // Remorse: a promoted pawn keeps its status (Claude Code's reading). Bario: a promoted piece is a fixed piece, not a Quantum.
   if (m.promo) moving = { ...moving, id: nextId++, kind: m.promo };
+  // Bario: an undefined Quantum becomes the type it moved as (a castling Quantum: the rook, below).
+  if (m.define && !m.castle) moving = { ...moving, kind: m.define };
   board[m.to] = moving;
 
   if (m.castle) {
@@ -381,7 +451,23 @@ export function play(pos: Position, m: MoveInfo): Position {
     const rookFrom = m.castle === 'k' ? sq(7, r) : sq(0, r);
     const rookTo = m.castle === 'k' ? sq(5, r) : sq(3, r);
     board[rookTo] = board[rookFrom];
+    if (m.define && board[rookTo]) board[rookTo] = { ...board[rookTo]!, kind: 'R' };
     board[rookFrom] = null;
+  }
+
+  // Bario: promotions raise the caps; a cycle ends when the side's last undefined Quantum is defined,
+  // and then all its defined Quantums turn back to undefined.
+  let bario = pos.bario;
+  if (pos.variant === 'bario') {
+    bario = { promos: { ...pos.bario!.promos }, cycles: { ...pos.bario!.cycles } };
+    if (m.promo) bario.promos[c]++;
+    if (m.define && !board.some((p) => p && p.color === c && p.kind === 'X')) {
+      for (let s = 0; s < 64; s++) {
+        const p = board[s];
+        if (p && p.color === c && p.quantum) board[s] = { ...p, kind: 'X' };
+      }
+      bario.cycles[c]++;
+    }
   }
 
   // Castling rights go when the king or a rook leaves home, or a rook is captured at home.
@@ -404,6 +490,8 @@ export function play(pos: Position, m: MoveInfo): Position {
     mk: pos.mk,
     mkRoll: false,
     extra: null,
+    bario,
+    rental: pos.rental,
   };
 }
 
@@ -477,12 +565,12 @@ export function formMegaKnights(pos: Position): { pos: Position; formed: number[
 
 /** Finds the legal move matching what a player asked for, or null if it is not legal. */
 export function findLegal(pos: Position, move: Move): MoveInfo | null {
-  return legalMoves(pos).find((m) => m.from === move.from && m.to === move.to && (m.promo ?? null) === (move.promo ?? null)) ?? null;
+  return legalMoves(pos).find((m) => m.from === move.from && m.to === move.to && (m.promo ?? null) === (move.promo ?? null) && (m.define ?? null) === (move.define ?? null)) ?? null;
 }
 
 // ---------------------------------------------------------------- FEN (for tests and debugging)
 
-const FEN_KIND: Record<string, Kind> = { k: 'K', q: 'Q', r: 'R', b: 'B', n: 'N', p: 'P' };
+const FEN_KIND: Record<string, Kind> = { k: 'K', q: 'Q', r: 'R', b: 'B', n: 'N', p: 'P', x: 'X' };
 
 export function fromFen(fen: string): Position {
   const [placement, turn, castle, ep, half, full] = fen.trim().split(/\s+/);

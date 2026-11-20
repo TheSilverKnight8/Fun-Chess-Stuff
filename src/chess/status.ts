@@ -4,7 +4,7 @@
 // end the game by themselves; nobody has to claim them.
 
 import { findKing, findLegal, inCheck, legalMoves, play } from './standard';
-import { isLightSquare, type Color, type Move, type MoveInfo, type Position } from './types';
+import { isLightSquare, other, type Color, type Move, type MoveInfo, type Position } from './types';
 
 export type BoardEnd =
   | { reason: 'checkmate'; winner: Color }
@@ -17,7 +17,13 @@ export type BoardEnd =
   /** Bastille: one move emptied both palaces (Claude's call in the spec: a draw). */
   | { reason: 'palaceBoth' }
   /** Mega Knight: a king was crushed; Remorse: a king captured itself or was taken by its own bloodlust piece. */
-  | { reason: 'kingLost'; winner: Color };
+  | { reason: 'kingLost'; winner: Color }
+  /** Rental: the loser had to give up their king to pay rent. */
+  | { reason: 'bankrupt'; winner: Color }
+  /** Rental: only kings are left; the smaller treasury loses. */
+  | { reason: 'treasury'; winner: Color }
+  /** Rental: only kings are left with equal treasuries (Claude's call in the spec: a draw). */
+  | { reason: 'treasuryTie' };
 
 /** A game in progress on the board: the position plus what the draw rules need to remember. */
 export interface BoardGame {
@@ -55,7 +61,7 @@ export function playMove(g: BoardGame, move: Move, after?: (pos: Position, m: Mo
 }
 
 /** Modes whose after-move rules run even after a move that would otherwise end the game (Mega Knight's crush and knights forming, Remorse's statuses). */
-const afterAlways = (pos: Position) => pos.variant === 'megaknight' || pos.variant === 'remorse';
+const afterAlways = (pos: Position) => pos.variant === 'megaknight' || pos.variant === 'remorse' || pos.variant === 'rental';
 
 /** Bastille's palaces: d1, e1, d2, e2 for White; d8, e8, d7, e7 for Black. */
 export const PALACE: Record<Color, number[]> = { w: [3, 4, 11, 12], b: [59, 60, 51, 52] };
@@ -92,6 +98,23 @@ export function boardEnd(g: BoardGame, repetition = true): BoardEnd | null {
     if (wGone) return { reason: 'kingLost', winner: 'b' };
     if (bGone) return { reason: 'kingLost', winner: 'w' };
   }
+  if (pos.variant === 'rental' && pos.rental) {
+    const r = pos.rental;
+    // Rent owed: the mover is choosing units to give up. With only the king left, it is bankruptcy.
+    if (r.owed !== null) {
+      const own = pos.board.filter((p) => p?.color === pos.turn);
+      return own.length <= 1 ? { reason: 'bankrupt', winner: other(pos.turn) } : null;
+    }
+    // Kings only: the smaller treasury loses (Betza's tiebreaker); equal is a draw.
+    if (pos.board.every((p) => !p || p.kind === 'K')) {
+      const { w, b } = r.treasury;
+      return w === b ? { reason: 'treasuryTie' } : { reason: 'treasury', winner: w > b ? 'w' : 'b' };
+    }
+    // Section 6 for Rental: stalemate is a draw; repetition and the fifty-move rule do not apply.
+    const ms = legalMoves(pos);
+    if (ms.length === 0) return inCheck(pos) ? { reason: 'checkmate', winner: other(pos.turn) } : { reason: 'stalemate' };
+    return null;
+  }
   const moves = legalMoves(pos);
   if (pos.variant === 'megaknight' && moves.length === 0 && inCheck(pos)) {
     // In check with no piece move: the player may still roll (a 6 that gets out of check saves them).
@@ -100,7 +123,8 @@ export function boardEnd(g: BoardGame, repetition = true): BoardEnd | null {
   if (moves.length === 0) {
     return inCheck(pos) ? { reason: 'checkmate', winner: pos.turn === 'w' ? 'b' : 'w' } : { reason: 'stalemate' };
   }
-  if (pos.variant !== 'megaknight' && deadPosition(pos)) return { reason: 'material' };
+  // Bario: only king against king is insufficient (a Quantum could become anything). Mega Knight: never.
+  if (pos.variant === 'bario' ? pos.board.every((p) => !p || p.kind === 'K') : pos.variant !== 'megaknight' && deadPosition(pos)) return { reason: 'material' };
   if (repetition && (g.seen[repetitionKey(pos)] ?? 0) >= 3) return { reason: 'repetition' };
   if (pos.halfmove >= 100) return { reason: 'fifty' };
   return null;
@@ -117,7 +141,7 @@ export function repetitionKey(pos: Position): string {
   let s = '';
   for (let i = 0; i < 64; i++) {
     const p = pos.board[i];
-    s += p ? (p.color === 'w' ? p.kind : p.kind.toLowerCase()) + (p.status ? `(${p.status}${p.kills ?? ''}${p.due ?? ''})` : '') : '.';
+    s += p ? (p.color === 'w' ? p.kind : p.kind.toLowerCase()) + (p.status ? `(${p.status}${p.kills ?? ''}${p.due ?? ''})` : '') + (p.quantum ? '~' : '') : '.';
   }
   const c = pos.castling;
   s += ` ${pos.turn} ${c.w.k ? 'K' : ''}${c.w.q ? 'Q' : ''}${c.b.k ? 'k' : ''}${c.b.q ? 'q' : ''}`;
@@ -127,6 +151,8 @@ export function repetitionKey(pos: Position): string {
   // Mega Knight: the mega knights; Remorse: statuses (above) and a pending extra move.
   if (pos.mk?.length) s += ` mk${[...pos.mk].sort((a, b) => a - b).join(',')}`;
   if (pos.extra !== null && pos.extra !== undefined) s += ` x${pos.extra}`;
+  // Bario: the cycle count is part of the position (spec section 6); promotions change the caps.
+  if (pos.bario) s += ` c${pos.bario.cycles.w}.${pos.bario.cycles.b} p${pos.bario.promos.w}.${pos.bario.promos.b}`;
   return s;
 }
 

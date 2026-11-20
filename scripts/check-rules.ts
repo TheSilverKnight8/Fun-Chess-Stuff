@@ -8,7 +8,8 @@ import { deadPosition, newBoardGame, playMove, repetitionKey, sideCannotMate, ty
 import { potholeStep } from '../src/chess/pothole.ts';
 import { rollMega } from '../src/chess/megaknight.ts';
 import { remorseStep, skipExtra } from '../src/chess/remorse.ts';
-import { formMegaKnights, findLegal } from '../src/chess/standard.ts';
+import { formMegaKnights, findLegal, quantumAvail } from '../src/chess/standard.ts';
+import { evict, rentFor, rentalAfterMove, rentalStart, squareRent } from '../src/chess/rental.ts';
 import { parseSquare, type Position, type Variant } from '../src/chess/types.ts';
 
 let failed = false;
@@ -355,6 +356,77 @@ console.log('\nRemorse');
   const gone = skipExtra({ ...dk }, 1).pos;
   const end = newBoardGame(gone).end;
   check(end?.reason === 'kingLost' && 'winner' in end && end.winner === 'b', 'a devastated king that captures itself loses');
+}
+
+// ---------------------------------------------------------------- Bario
+
+console.log('\nBario');
+{
+  const bp = (fen: string, promos = { w: 0, b: 0 }): Position => {
+    const pos = fromFen(fen);
+    return { ...pos, variant: 'bario', board: pos.board.map((p) => (p && p.kind === 'X' ? { ...p, quantum: true } : p)), bario: { promos, cycles: { w: 0, b: 0 } } };
+  };
+  const startB = bp('xxxxkxxx/pppppppp/8/8/8/8/PPPPPPPP/XXXXKXXX w KQkq - 0 1');
+  const ms = legalMoves(startB);
+  check(ms.some((m) => m.from === P('b1') && m.to === P('c3') && m.define === 'N'), 'an undefined Quantum can move as a knight (becoming one)');
+  check(ms.filter((m) => !m.define).length === 16, 'start: 16 pawn moves, the rest are Quantum moves with a chosen type');
+  let g = newBoardGame(startB);
+  g = playMove(g, { from: P('b1'), to: P('c3'), define: 'N' })!;
+  check(g.pos.board[P('c3')]?.kind === 'N' && g.pos.board[P('c3')]?.quantum === true, 'it becomes a knight and stays one');
+  // Caps: with both knights defined, no Quantum can become a knight.
+  const two = bp('4k3/8/8/8/8/8/8/XN2KN1X w - - 0 1');
+  two.board[P('b1')] = { ...two.board[P('b1')]!, quantum: true };
+  two.board[P('f1')] = { ...two.board[P('f1')]!, quantum: true };
+  check(!quantumAvail(two, 'w')!.has('N') && !legalMoves(two).some((m) => m.define === 'N'), 'both knights used: no Quantum may become a knight this cycle');
+  check(quantumAvail(bp('4k3/8/8/8/8/8/8/XN2KN1X w - - 0 1', { w: 1, b: 0 }), 'w')!.size === 4, 'a promotion raises every cap by 1');
+  // Cycle: defining the last undefined Quantum turns all defined ones back to undefined.
+  const last = bp('4k3/8/8/8/8/8/8/X3K3 w - - 0 1');
+  last.board[P('a1')] = { id: 99, color: 'w', kind: 'X', quantum: true };
+  last.board[P('h2')] = { id: 98, color: 'w', kind: 'R', quantum: true };
+  g = playMove(newBoardGame(last), { from: P('a1'), to: P('a5'), define: 'R' })!;
+  check(g.pos.board[P('a5')]?.kind === 'X' && g.pos.board[P('h2')]?.kind === 'X' && g.pos.bario!.cycles.w === 1, 'the last definition ends the cycle: every defined Quantum becomes undefined again');
+  // Check: an undefined Quantum gives check if an available type could attack.
+  check(inCheck(bp('4k3/8/8/8/8/8/8/4X1K1 b - - 0 1')), 'an undefined Quantum on the king’s file gives check (it could be a rook or queen)');
+  const noLines = bp('4k3/8/8/8/8/8/8/4X1K1 b - - 0 1');
+  noLines.board[P('a2')] = { id: 90, color: 'w', kind: 'R', quantum: true };
+  noLines.board[P('b2')] = { id: 91, color: 'w', kind: 'R', quantum: true };
+  noLines.board[P('c2')] = { id: 92, color: 'w', kind: 'Q', quantum: true };
+  check(!inCheck(noLines), '...but not once rooks and the queen are used up this cycle');
+  // Castling with an undefined Quantum on the rook's square: it becomes a rook.
+  g = newBoardGame(bp('4k3/8/8/8/8/8/8/4K2X w K - 0 1'));
+  g = playMove(g, { from: P('e1'), to: P('g1'), define: 'R' })!;
+  check(!!g && g.pos.board[P('f1')]?.kind !== undefined && g.pos.board[P('g1')]?.kind === 'K', 'castling with a Quantum, which turns into a rook');
+  // Promotion: anything, and the caps rise.
+  g = playMove(newBoardGame(bp('4k3/P7/8/8/8/8/8/4K3 w - - 0 1')), { from: P('a7'), to: P('a8'), promo: 'N' })!;
+  check(g.pos.board[P('a8')]?.kind === 'N' && !g.pos.board[P('a8')]?.quantum && g.pos.bario!.promos.w === 1, 'a promotion is a fixed piece and raises the caps');
+  check(newBoardGame(bp('4k3/8/8/8/8/8/8/4K1X1 w - - 0 1')).end === null && newBoardGame(bp('4k3/8/8/8/8/8/8/4K3 w - - 0 1')).end?.reason === 'material', 'insufficient material only for king against king');
+}
+
+// ---------------------------------------------------------------- Rental
+
+console.log('\nRental');
+{
+  check(squareRent(P('a1')) === 1 && squareRent(P('d4')) === 4 && squareRent(P('c3')) === 2, 'rent: edge 1, centre 4, others 2');
+  const st = rentalStart({ ...startPosition('rental') });
+  check(st.rental!.treasury.w === 48 && st.rental!.treasury.b === 0, 'White receives its first income (16 units x 3) before moving');
+  check(rentFor(st, 'w', 0) === 22 && rentFor(st, 'w', 4) === 22 && rentFor(st, 'w', 5) === 38 && rentFor(st, 'w', 10) === 54, 'the start position costs White 22 (10 edge squares, 6 others); +1 a square after 5 rounds, +2 after 10');
+  let g = newBoardGame(st);
+  const m1 = findLegal(g.pos, { from: P('e2'), to: P('e4') })!;
+  const after = rentalAfterMove(g.pos, play(g.pos, m1));
+  check(after.pos.rental!.treasury.w === 48 - 24 && after.pos.rental!.treasury.b === 48 && after.pos.turn === 'b', 'e4 (a centre square, 4): White pays 24, Black receives 48');
+  // Cannot pay: units are given up until it can.
+  const poor = { ...fromFen('4k3/8/8/8/3Q4/8/8/4K3 w - - 0 1'), variant: 'rental' as const, rental: { treasury: { w: 2, b: 10 }, owed: null } };
+  const pm = findLegal(poor, { from: P('d4'), to: P('d5') })!;
+  const owe = rentalAfterMove(poor, play(poor, pm));
+  check(owe.pos.rental!.owed === 5 && owe.pos.turn === 'w' && legalMoves(owe.pos).length === 0, 'rent it cannot pay is owed, and the player must give up units');
+  const ev = evict(owe.pos, P('d5'))!;
+  check(ev.pos.rental!.owed === null && ev.pos.rental!.treasury.w === 1 && ev.pos.turn === 'b', 'giving up the queen makes the rent payable; the turn passes');
+  check(newBoardGame(ev.pos).end?.reason === 'treasury', '...and with kings only the smaller treasury loses');
+  const broke = { ...fromFen('4k3/8/8/8/8/8/8/4K3 w - - 0 1'), variant: 'rental' as const, rental: { treasury: { w: 0, b: 10 }, owed: 1 } };
+  const be = newBoardGame(broke).end;
+  check(be?.reason === 'bankrupt' && 'winner' in be && be.winner === 'b', 'owing rent with only the king left is bankruptcy');
+  g = newBoardGame({ ...st, board: st.board.map((p) => (p?.kind === 'K' ? p : null)), rental: { treasury: { w: 5, b: 5 }, owed: null } });
+  check(g.end?.reason === 'treasuryTie', 'kings only with equal treasuries: a draw');
 }
 
 console.log(failed ? '\nSome checks FAILED' : '\nAll checks passed');

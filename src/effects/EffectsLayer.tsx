@@ -6,6 +6,7 @@ import { CREAM, INK, drawPiece } from '../board/pieceShapes';
 import { MK_LAND, ROLL, SLIDE_MS, onFx, openAt, type FxEvent } from './fx';
 import { megaSquares } from '../chess/standard';
 import type { RemorseEvent } from '../chess/remorse';
+import type { RentalEvent } from '../chess/rental';
 import type { Roll } from '../chess/pothole';
 
 // Standard Chess's effects (Caleb approved all of them in Stage 2), drawn on two
@@ -184,6 +185,20 @@ function handle(e: FxEvent, add: Add, kick: Kick) {
     remorseFx(add, kick, g, e.ev);
     return;
   }
+  if (e.t === 'cycle') {
+    // Bario: a ripple across every Quantum as they come undone.
+    e.squares.forEach((s, i) => {
+      const c = g.center(s);
+      ring(add, g, s, SLIDE_MS + 300 + i * 40);
+      spark(add, c.x, c.y, g.sq * 0.9, SLIDE_MS + 300 + i * 40, '#7b5cc4');
+    });
+    banner(add, 'Cycle reset', SLIDE_MS + 350, 1500);
+    return;
+  }
+  if (e.t === 'rental') {
+    rentalFx(add, kick, g, e.ev, e.me, e.squares, e.payer);
+    return;
+  }
   if (e.t === 'move') {
     const { m } = e;
     const to = g.center(m.to);
@@ -201,6 +216,12 @@ function handle(e: FxEvent, add: Add, kick: Kick) {
       return;
     }
     if (e.extraMove) streaks(add, g, m.from, m.to, true);
+    // Bario: a Quantum takes its shape: a violet burst and the name of what it became.
+    if (m.define) {
+      const at = g.center(m.castle ? (m.castle === 'k' ? m.to - 1 : m.to + 1) : m.to);
+      spark(add, at.x, at.y, g.sq * 1.4, SLIDE_MS, '#7b5cc4');
+      floatWord(add, at.x, at.y - g.sq * 0.9, g.sq, KIND_WORD[m.define], '#7b5cc4', SLIDE_MS + 60);
+    }
     if (m.castle) {
       // King and rook slide together with speed streaks.
       const r = m.from >> 3;
@@ -235,6 +256,11 @@ function handle(e: FxEvent, add: Add, kick: Kick) {
   // The end of the game.
   const { result, pos } = e;
   const delay = (e.afterMove ? SLIDE_MS + 260 : 0) + e.extraDelay;
+  if (result.reason === 'bankrupt' || result.reason === 'treasury') {
+    kick(14, delay + 500);
+    banner(add, result.reason === 'bankrupt' ? 'Bankrupt' : 'The richer king wins', delay + 600, 1900);
+    return;
+  }
   if (result.reason === 'kingLost') {
     const mega = pos.variant === 'megaknight';
     kick(20, delay + (mega ? MK_LAND : 0));
@@ -266,7 +292,77 @@ const DRAW_BANNER: Record<string, string> = {
   material: 'Insufficient material',
   agreement: 'Draw agreed',
   timeoutDraw: 'Out of time · Draw',
+  treasuryTie: 'Equal treasuries · Draw',
 };
+
+const KIND_WORD: Record<string, string> = { Q: 'Queen', R: 'Rook', B: 'Bishop', N: 'Knight' };
+
+/** A word in a coloured tag that rises and fades (status words, Quantum types, money). */
+function floatWord(add: Add, x: number, y: number, sq: number, word: string, color: string, delay: number, life = 1200) {
+  add({
+    layer: 'front',
+    delay,
+    life,
+    draw(ctx, _age, k) {
+      ctx.globalAlpha = fadeOut(k, 0.6);
+      const yy = y - sq * 0.6 * easeOut(k);
+      ctx.font = `400 ${Math.round(sq * 0.42)}px Norwester, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const w = ctx.measureText(word.toUpperCase()).width + sq * 0.4;
+      ctx.fillStyle = color;
+      ctx.fillRect(x - w / 2, yy - sq * 0.3, w, sq * 0.6);
+      ctx.fillStyle = SURFACE;
+      ctx.fillText(word.toUpperCase(), x, yy + 1);
+    },
+  });
+}
+
+/** Rental: coins fly up from the payer's pieces with the rent; income arrives at the other side; a unit given up shatters. */
+function rentalFx(add: Add, kick: Kick, g: Geom, ev: RentalEvent, me: Color, squares: number[], payerColor: Color | null = null) {
+  const GOLD = '#c9a227';
+  const sideY = (c: Color) => (c === me ? g.y + g.size + g.sq * 0.2 : g.y - g.sq * 0.2);
+  if (ev.evicted) {
+    const c = g.center(ev.evicted.sq);
+    shatter(add, ev.evicted.piece, c.x, c.y, g.sq, 0);
+    floatWord(add, c.x, c.y - g.sq * 0.6, g.sq, 'Evicted', RED, 80);
+    kick(5);
+  }
+  const coinsFrom = (from: number[], toY: number, delay: number) => {
+    const pts = from.map((s) => g.center(s));
+    add({
+      layer: 'front',
+      delay,
+      life: 700,
+      draw(ctx, _age, k) {
+        ctx.globalAlpha = fadeOut(k, 0.7);
+        for (const p of pts) {
+          const x = p.x + (g.x + g.size / 2 - p.x) * easeOut(k) * 0.6;
+          const y = p.y + (toY - p.y) * easeOut(k);
+          ctx.fillStyle = GOLD;
+          ctx.strokeStyle = INK;
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.ellipse(x, y, g.sq * 0.14, g.sq * 0.1, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+        }
+      },
+    });
+  };
+  if (ev.paid) {
+    coinsFrom(squares, g.y - g.sq * 2, SLIDE_MS + 100);
+    floatWord(add, g.x + g.size / 2, sideY(ev.paid.color), g.sq, `Rent −${ev.paid.amount}`, INK, SLIDE_MS + 150);
+  }
+  if (ev.owed !== null) {
+    // The owing player: the side to move.
+    const owing: Color = payerColor ?? me;
+    floatWord(add, g.x + g.size / 2, sideY(owing), g.sq, `Rent due ${ev.owed}`, RED, SLIDE_MS + 150, 1600);
+    frameFlash(add, g, SLIDE_MS + 100);
+  }
+  if (ev.income) floatWord(add, g.x + g.size / 2, sideY(ev.income.color), g.sq, `Income +${ev.income.amount}`, GOLD, SLIDE_MS + 650);
+  if (ev.riseNow) banner(add, `Rent up: +${ev.riseNow} a square`, SLIDE_MS + 900, 1700);
+}
 
 // ---------------------------------------------------------------- the effects
 
