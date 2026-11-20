@@ -11,7 +11,7 @@ Macro to micro, with a test checkpoint at the end of each stage. Each mode stage
 3. **Bastille and Pot-Hole.** **(done)**
 4. **Remorse and Mega Knight**, plus the guidebook (Caleb's request). **(done)**
 5. **Bario and Rental.** **(done)**
-6. **Revival.** **(this stage)**
+6. **Revival.** **(done)**
 7. **Tuning** from Caleb's playtests.
 
 ## Caleb's answers
@@ -38,7 +38,8 @@ Macro to micro, with a test checkpoint at the end of each stage. Each mode stage
 | Stage 5 rule questions, effects and music | "Build stage 4 first with your picks, then stage 5": Claude Code's picks below, its effects and its music. |
 | Revival's view (Stage 6) | Only the main board is visible; a button switches to the auxiliary board with an effect. Units moving between boards show an effect leaving, then the view switches to the other board by itself, then an effect entering. |
 | Revival's rules (Stage 6) | Claude Code's picks 1–9 below; Caleb answered with the view design and did not change them. |
-| Mega Knight: four failed rolls repeat the position (asked after Stage 5) | No answer yet; unchanged (a draw by threefold repetition can come from rolls alone). |
+| Mega Knight: four failed rolls repeat the position (asked after Stage 5) | Caleb: "you decide". A roll that does nothing does not count as another occurrence of the position for threefold repetition; repetitions come from moves. It still counts as a move for the fifty-move rule (spec). |
+| Revival: where the view ends up after pieces change boards | Caleb: "you decide". After the arrival effect the view goes back to the board the player last chose with the button (the main board unless they flipped), unless they have a piece to place (then it stays on that piece's board). |
 
 ## Questions for Caleb (from Stage 1)
 
@@ -227,7 +228,7 @@ Caleb: "a visual animated guidebook for each mode accessible in game at all time
 
 ### Things to know from playing it
 
-- **Mega Knight and repetition:** a roll that does nothing leaves the position as it was. Four rolls in a row with no 6 (two each) bring the starting position back a third time: a draw by threefold repetition (spec: repetition applies, the position includes the mega knight, and a roll counts as a move). Found in testing; Caleb may want rolls to change this.
+- **Mega Knight and repetition:** found in testing: four rolls in a row with no 6 brought the starting position back a third time, a draw by repetition. Changed (Claude Code's call at Caleb's request): rolls that do nothing do not count toward repetition.
 - **Mega Knight at the start:** the mega knight on d4, e4, d5, e5 blocks the d and e pawns' two-square first steps (they can still step one square).
 
 ### How it is shown

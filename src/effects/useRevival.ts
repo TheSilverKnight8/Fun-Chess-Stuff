@@ -22,6 +22,8 @@ export function useRevival(game: GameView, me: Color) {
   const timers = useRef<number[]>([]);
   const lastKey = useRef('');
   const viewRef = useRef<BoardName>('main');
+  /** The board the player last chose with the button (main at the start): the view comes back here after automatic switches. */
+  const chosen = useRef<BoardName>('main');
 
   const setView = (v: BoardName, sound = true) => {
     if (viewRef.current === v) return;
@@ -48,6 +50,8 @@ export function useRevival(game: GameView, me: Color) {
     }
     let t = 0;
     const at = (ms: number, fn: () => void) => timers.current.push(window.setTimeout(fn, ms));
+    // The board the player chose themselves (Claude Code's call: the view goes back there afterwards).
+    const home = chosen.current;
     for (const tr of game.transfers as Transfer[]) {
       const start = t;
       at(start, () => {
@@ -70,9 +74,10 @@ export function useRevival(game: GameView, me: Color) {
         t += 250 + ENTER_MS;
       } else t += 300;
     }
-    // A piece now waiting for my choice: end on its board.
+    // Afterwards: a piece waiting for my choice keeps its board in view; otherwise back to where I was.
     const head = revival.queue[0];
     if (head && head.owner === me) at(t, () => setView(head.board));
+    else at(t + 300, () => setView(home));
   });
 
   const pos = game.pos;
@@ -83,5 +88,11 @@ export function useRevival(game: GameView, me: Color) {
       ? { ...pos, variant: 'standard', revival: undefined }
       : { ...pos, board: revival.aux, ep: revival.auxEp, castling: { w: { k: false, q: false }, b: { k: false, q: false } }, variant: 'revivalAux', revival: undefined };
 
-  return { view, setView, flips, shown };
+  /** The flip button: the player's own choice. */
+  const toggle = (v: BoardName) => {
+    chosen.current = v;
+    setView(v);
+  };
+
+  return { view, setView: toggle, flips, shown };
 }

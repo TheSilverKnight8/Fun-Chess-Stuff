@@ -268,6 +268,9 @@ console.log('\nMega Knight');
   let g = newBoardGame(mkPos('4k3/8/8/8/8/8/8/4K3 w - - 0 1', ['d4']));
   const after3 = rollMega(g, 3);
   check(after3.pos.turn === 'b' && !after3.end, 'a roll of 1-5 does nothing and the turn passes');
+  let rg = newBoardGame(mkPos('4k3/8/8/8/8/8/8/4K3 w - - 0 1', ['d4']));
+  for (let i = 0; i < 8; i++) rg = rollMega(rg, 2);
+  check(!rg.end, 'rolls that do nothing do not make a threefold repetition');
   const after6 = rollMega(g, 6);
   check(after6.pos.mkRoll === true && after6.pos.turn === 'w' && legalMoves(after6.pos).every((m) => m.mk), 'a 6: the turn’s move is a mega knight move');
   // Crushing.

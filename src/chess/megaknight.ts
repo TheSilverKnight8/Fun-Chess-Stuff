@@ -3,7 +3,7 @@
 // they move a mega knight as that turn's move, anything else does nothing.
 
 import { inCheck, legalMoves } from './standard';
-import { boardEnd, repetitionKey, type BoardGame } from './status';
+import { boardEnd, type BoardGame } from './status';
 import { other, type Position } from './types';
 
 /** The turn passes with nothing moved (a roll that did nothing). A roll counts as a move for the fifty-move rule (spec section 6). */
@@ -26,9 +26,10 @@ export function rollMega(g: BoardGame, d6: number): BoardGame {
     if (legalMoves(armed).length) return { ...g, pos: armed, end: null };
   }
   if (check) return mate();
+  // A roll that does nothing does not count as another occurrence of the position for
+  // threefold repetition (Claude Code's call, at Caleb's request): repetitions come from moves.
   const next = pass(pos);
-  const key = repetitionKey(next);
-  const out: BoardGame = { pos: next, seen: { ...g.seen, [key]: (g.seen[key] ?? 0) + 1 }, lastMove: null, end: null };
+  const out: BoardGame = { pos: next, seen: g.seen, lastMove: null, end: null };
   out.end = boardEnd(out);
   return out;
 }
