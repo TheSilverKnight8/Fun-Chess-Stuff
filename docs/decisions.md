@@ -124,7 +124,7 @@ All answered (see above).
 - All sound is made in the browser with the Web Audio API (`src/lib/audio/`), the same engine as Stickman Arena. There are no audio files.
 - Sound starts after the first tap or key press (a browser rule) and pauses while the app is in the background. Music and effects have their own volume (Settings; defaults 50% and 80%).
 - Music (Caleb's answer: unique music per mode, plus the menu theme):
-  - **Opening**, the menu theme: light and playful, F major, 112 beats a minute, a plucked square-wave lead. Plays on Home, Settings and the room setup.
+  - **Menu theme** (Caleb's request in Stage 3): a rendition of Caleb's piano piece, from the MIDI file he gave. Sixteen seventh chords in C major (Cmaj7, Dm7, Cmaj7, Bm7♭5, Am7, G7, Fmaj7, Em7, Dm7, Cmaj7 and back up), each arpeggiated 1-3-5-7-5-3 twice in quarter notes at 240 beats a minute over a held bass note an octave below the root, on a ringing piano-like voice (the score holds the sustain pedal). The score plays the sixteen chords twice; the theme loops them. Plays on Home, Settings and the room setup. (Replaces "Opening", the Stage 2 menu theme.)
   - **Gambit**, Standard Chess: thoughtful but driving, A minor, 100 beats a minute, a soft triangle lead over a pulsing bass.
   - **Tension layer** (game tracks): four-on-the-floor kicks, running hats and a sawtooth arpeggio fade in while a king is in check or a running clock is under 30 seconds, and fade out when that ends.
   - Each later mode gets its own game track in its own stage (`MODE_TRACK` in `src/modes.ts`).
