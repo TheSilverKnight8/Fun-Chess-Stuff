@@ -13,7 +13,7 @@ import { COLOR_NAME, other, type Color } from '../chess/types';
 import { PageLayout, PageTitle, PlayLayout } from '../components/Layout';
 import { RoomCodeCard, useLeaveOnUnmount } from '../components/RoomBits';
 import { confirmDialog, notify } from '../components/dialogs';
-import { Button, ButtonLink, Card, Chip, Spinner, cx } from '../components/ui';
+import { Button, ButtonLink, Card, Chip, Segmented, Spinner, cx } from '../components/ui';
 import { RESULT_TEXT, type GameView, type Result } from '../game/match';
 import {
   backToSetup,
@@ -156,10 +156,43 @@ function SetupScreen({ s }: { s: RoomScreen }) {
               })}
             </div>
           </Card>
+          {s.setup.mode === 'pothole' && <PotholeOptions value={s.setup.options.potholeDuration} host={host} />}
           <TimePicker value={s.setup.time} host={host} />
         </div>
       </div>
     </PageLayout>
+  );
+}
+
+/** Pot-Hole's mode option (spec 7.3, Caleb): how long a pothole stays open. The host sets it. */
+function PotholeOptions({ value, host }: { value: 'base' | 'random'; host: boolean }) {
+  const label = { base: 'One turn (base rule)', random: '1 to 6 turns (random)' };
+  return (
+    <Card className="p-5">
+      <p className="label-caps text-muted">Pot-Hole: how long a pothole stays open</p>
+      {host ? (
+        <Segmented
+          className="mt-3"
+          label="How long a pothole stays open"
+          value={value}
+          onChange={(v) => {
+            sfx.click();
+            setSetup({ options: { potholeDuration: v } });
+          }}
+          options={[
+            { value: 'base', label: label.base },
+            { value: 'random', label: label.random },
+          ]}
+        />
+      ) : (
+        <p className="mt-3 font-display text-2xl uppercase">{label[value]}</p>
+      )}
+      <p className="mt-2 text-sm text-muted">
+        {value === 'base'
+          ? 'A pothole blocks its square for the other player’s next turn, then closes.'
+          : 'When a pothole opens, a six-sided roll decides how many turns (moves by either player) it stays open.'}
+      </p>
+    </Card>
   );
 }
 
@@ -293,7 +326,7 @@ function GameScreen({ s, game, onLeave }: { s: RoomScreen; game: GameView; onLea
   const [box, size] = useSize<HTMLDivElement>();
   const shakeRef = useRef<HTMLDivElement>(null);
   useMusic(MODE_TRACK[game.mode] ?? null);
-  useGameFx(game, me, s.reconnecting !== null);
+  const { holeHidden } = useGameFx(game, me, s.reconnecting !== null);
 
   const landscape = size.w >= 700 && size.w >= size.h * 1.15;
   const PANEL = 340;
@@ -326,6 +359,8 @@ function GameScreen({ s, game, onLeave }: { s: RoomScreen; game: GameView; onLea
       intro={game.pos.fullmove === 1 && game.pos.turn === 'w' && !over}
       fallen={fallen}
       drained={drained}
+      holeHidden={holeHidden}
+      showTurns={game.options.potholeDuration === 'random'}
     />
   );
   const opponentBar = (
@@ -493,6 +528,10 @@ function resultLine(r: Result, me: Color) {
       return `${who} left the game.`;
     case 'checkmate':
       return `Checkmate. ${r.winner ? COLOR_NAME[r.winner] : ''} wins.`;
+    case 'palace':
+      return loser === me ? 'Your palace is empty.' : 'Your opponent’s palace is empty.';
+    case 'palaceBoth':
+      return 'One move emptied both palaces.';
     default:
       return `${RESULT_TEXT[r.reason]}.`;
   }

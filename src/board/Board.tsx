@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { findKing, inCheck, legalMoves } from '../chess/standard';
+import { palaceCount } from '../chess/status';
 import { KIND_NAME, fileOf, rankOf, sq, type Color, type Move, type MoveInfo, type Position, type PromoKind } from '../chess/types';
 import { cx } from '../components/ui';
 import { PieceArt } from './PieceArt';
@@ -24,6 +25,10 @@ export interface BoardProps {
   fallen?: { color: Color; slow: boolean } | null;
   /** Effects: the board drains to grey for a moment (a draw). */
   drained?: boolean;
+  /** Pot-Hole: hide the open pothole for now (its opening is still being animated). */
+  holeHidden?: boolean;
+  /** Pot-Hole (random duration): show the pothole's turns left as pips. */
+  showTurns?: boolean;
 }
 
 const PROMO_ORDER: PromoKind[] = ['Q', 'R', 'B', 'N'];
@@ -42,7 +47,7 @@ interface Drag {
   wasSelected: boolean;
 }
 
-export function Board({ pos, orientation, canMove, lastMove, showLegal, showLast, onMove, intro = false, fallen = null, drained = false }: BoardProps) {
+export function Board({ pos, orientation, canMove, lastMove, showLegal, showLast, onMove, intro = false, fallen = null, drained = false, holeHidden = false, showTurns = false }: BoardProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [selected, setSelected] = useState<number | null>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
@@ -164,6 +169,12 @@ export function Board({ pos, orientation, canMove, lastMove, showLegal, showLast
         );
       })}
 
+      {/* Pot-Hole: the open pothole, a dark pit with cracked edges. */}
+      {pos.hole && !holeHidden && <Pothole {...place(pos.hole.sq)} turns={showTurns ? pos.hole.turns : 0} />}
+
+      {/* Bastille: each side's palace, walled. */}
+      {pos.variant === 'bastille' && (['w', 'b'] as const).map((c) => <PalaceWall key={c} color={c} flip={flip} pos={pos} />)}
+
       {/* Pieces. Keyed by piece, so a moving piece slides to its new square. */}
       {pieces.map(({ p, s }) => {
         const { col, row } = place(s);
@@ -218,6 +229,65 @@ export function Board({ pos, orientation, canMove, lastMove, showLegal, showLast
         />
       )}
     </div>
+  );
+}
+
+/** An open pothole: a jagged dark pit filling most of the square, with cracks running out. */
+function Pothole({ col, row, turns }: { col: number; row: number; turns: number }) {
+  return (
+    <div className="pointer-events-none absolute animate-pop" style={{ left: `${col * 12.5}%`, top: `${row * 12.5}%`, width: '12.5%', height: '12.5%' }} data-hole>
+      <svg viewBox="0 0 100 100" className="h-full w-full" aria-hidden>
+        <path d="M2 18 L14 4 L30 9 L46 1 L62 8 L80 3 L97 16 L93 34 L99 52 L92 70 L98 88 L80 97 L62 92 L44 99 L28 93 L10 98 L3 80 L8 62 L1 44 L7 30 Z" fill="#6b5640" />
+        <path d="M10 22 L20 11 L34 15 L48 8 L63 14 L78 10 L90 21 L86 37 L91 53 L85 69 L90 84 L76 90 L61 85 L45 92 L30 86 L15 90 L10 76 L15 60 L9 45 L14 32 Z" fill="#0b1626" />
+        <path d="M22 30 L40 40 L36 58 M60 26 L58 44 L76 52 M34 74 L50 64 L68 72" fill="none" stroke="#1d2c44" strokeWidth="3" strokeLinecap="round" />
+      </svg>
+      {turns > 0 && (
+        <div className="absolute inset-x-0 bottom-[8%] flex justify-center gap-[6%]">
+          {Array.from({ length: turns }, (_, i) => (
+            <span key={i} className="block aspect-square w-[11%] rounded-full bg-[var(--sq-light)] shadow-[0_0_0_1px_var(--navy)]" />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Bastille: a crenellated wall around a palace's four squares. It pulses red when
+ * the palace is down to its last own piece, and lies in ruins when it is empty.
+ */
+function PalaceWall({ color, flip, pos }: { color: Color; flip: boolean; pos: Position }) {
+  const count = palaceCount(pos, color);
+  const top = (color === 'w') !== flip ? 6 : 0;
+  // Wall outline around columns 3-4 and two rows, in board units of 100 per square.
+  const x0 = 300;
+  const y0 = top * 100;
+  const w = 200;
+  const h = 200;
+  const merlons: { x: number; y: number }[] = [];
+  for (let i = 0; i <= 8; i++) {
+    merlons.push({ x: x0 + i * 25, y: y0 }, { x: x0 + i * 25, y: y0 + h });
+    if (i > 0 && i < 8) merlons.push({ x: x0, y: y0 + i * 25 }, { x: x0 + w, y: y0 + i * 25 });
+  }
+  const tone = count === 0 ? 'ruin' : count === 1 ? 'danger' : 'ok';
+  return (
+    <svg viewBox="0 0 800 800" className={cx('pointer-events-none absolute inset-0 h-full w-full', tone === 'danger' && 'animate-check-pulse')} aria-hidden data-palace={color}>
+      <rect
+        x={x0}
+        y={y0}
+        width={w}
+        height={h}
+        fill={tone === 'danger' ? 'rgb(252 63 63 / 0.14)' : 'none'}
+        stroke={tone === 'danger' ? 'var(--accent)' : 'var(--navy)'}
+        strokeWidth={9}
+        strokeDasharray={tone === 'ruin' ? '22 30' : undefined}
+        opacity={tone === 'ruin' ? 0.45 : 0.9}
+      />
+      {tone !== 'ruin' &&
+        merlons.map((m, i) => (
+          <rect key={i} x={m.x - 6} y={m.y - 6} width={12} height={12} fill={tone === 'danger' ? 'var(--accent)' : 'var(--navy)'} rx={1.5} />
+        ))}
+    </svg>
   );
 }
 

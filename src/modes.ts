@@ -1,5 +1,5 @@
-// The game modes in the spec (section 7), in the spec's order. Only Standard
-// Chess is built in Stage 1; the others show the stage they arrive in.
+// The game modes in the spec (section 7), in the spec's order. Modes not built
+// yet show the stage they arrive in.
 
 import type { TrackId } from './lib/audio/music';
 
@@ -18,8 +18,8 @@ export interface ModeInfo {
 
 export const MODES: ModeInfo[] = [
   { id: 'standard', name: 'Standard Chess', author: null, blurb: 'Orthodox chess.', stage: null },
-  { id: 'bastille', name: 'Bastille Chess', author: 'Paul DeWitte', blurb: 'Empty your opponent’s palace to win. Kings are not royal.', stage: 3 },
-  { id: 'pothole', name: 'Pot-Hole Chess', author: 'Peter Spicer and Michael Chamberlain', blurb: 'After every move, a die roll can open a pothole.', stage: 3 },
+  { id: 'bastille', name: 'Bastille Chess', author: 'Paul DeWitte', blurb: 'Empty your opponent’s palace to win. Kings are not royal.', stage: null },
+  { id: 'pothole', name: 'Pot-Hole Chess', author: 'Peter Spicer and Michael Chamberlain', blurb: 'After every move, a die roll can open a pothole.', stage: null },
   { id: 'bario', name: 'Bario', author: 'Panos Louridas', blurb: 'Undefined Quantum pieces choose what they are when they move.', stage: 5 },
   { id: 'revival', name: 'Revival Chess', author: 'Bardelo Bardalini', blurb: 'Captured pieces go to an auxiliary board and can fight their way back.', stage: 6 },
   { id: 'rental', name: 'Rental Chess', author: 'inspired by Ralph Betza', blurb: 'Your units earn income and pay rent for the squares they stand on.', stage: 5 },
@@ -30,4 +30,4 @@ export const MODES: ModeInfo[] = [
 export const modeInfo = (id: ModeId) => MODES.find((m) => m.id === id)!;
 
 /** Each mode's own game music (Caleb's answer: unique music per mode). Added as each mode is built. */
-export const MODE_TRACK: Partial<Record<ModeId, TrackId>> = { standard: 'standard' };
+export const MODE_TRACK: Partial<Record<ModeId, TrackId>> = { standard: 'standard', bastille: 'bastille', pothole: 'pothole' };

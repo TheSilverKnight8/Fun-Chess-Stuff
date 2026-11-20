@@ -168,6 +168,50 @@ export const sfx = {
     tone(150, { at: 0.55, type: 'triangle', to: 70, dur: 0.2, gain: 0.3 });
     clack(0.78, 0.8, 0.6);
   },
+  /** Pot-Hole: dice tumbling (the eight-sided ones a little higher). */
+  dice(small = false) {
+    for (let i = 0; i < 7; i++) {
+      noise({ at: i * 0.05 + Math.random() * 0.02, filter: 'bandpass', hz: (small ? 3200 : 2200) + Math.random() * 800, q: 4, dur: 0.03, gain: 0.22 });
+      tone((small ? 900 : 600) + Math.random() * 300, { at: i * 0.05, type: 'triangle', dur: 0.03, gain: 0.05 });
+    }
+  },
+  /** A die comes to rest: brighter on an even roll. */
+  diceLand(even: boolean) {
+    clack(0, even ? 1.4 : 0.8, 0.9);
+    if (even) tone(midiHz(84), { at: 0.04, type: 'triangle', dur: 0.15, gain: 0.1 });
+  },
+  /** The pothole landed on a king: re-roll. */
+  reroll() {
+    notes([76, 71], { type: 'square', step: 0.08, dur: 0.1, gain: 0.08 });
+  },
+  /** A pothole cracks open: a crack and a rumble. */
+  crack() {
+    noise({ filter: 'highpass', hz: 2500, dur: 0.12, gain: 0.35 });
+    noise({ at: 0.03, filter: 'lowpass', hz: 300, dur: 0.6, gain: 0.6 });
+    tone(70, { type: 'sine', to: 35, dur: 0.6, gain: 0.35 });
+  },
+  /** A piece falls into the pothole: a falling whistle, then a distant thud. */
+  fall() {
+    tone(1400, { type: 'sine', to: 300, dur: 0.45, gain: 0.07 });
+    noise({ at: 0.46, filter: 'lowpass', hz: 400, dur: 0.2, gain: 0.4 });
+    tone(90, { at: 0.46, type: 'sine', to: 50, dur: 0.25, gain: 0.25 });
+  },
+  /** A pothole is patched over. */
+  patch() {
+    noise({ filter: 'lowpass', hz: 900, dur: 0.15, gain: 0.5 });
+    tone(140, { type: 'triangle', to: 90, dur: 0.12, gain: 0.25 });
+    noise({ at: 0.05, filter: 'highpass', hz: 3000, dur: 0.2, gain: 0.1 });
+  },
+  /** Bastille: a palace's walls crumble. */
+  crumble() {
+    tone(80, { type: 'sine', to: 30, dur: 1, gain: 0.45 });
+    for (let i = 0; i < 10; i++) noise({ at: i * 0.07 + Math.random() * 0.04, filter: 'bandpass', hz: 600 + Math.random() * 1400, q: 1.5, dur: 0.12, gain: 0.3 });
+    noise({ filter: 'lowpass', hz: 700, toHz: 150, dur: 1.2, gain: 0.5 });
+  },
+  /** Bastille: a captured king's crown flies off. */
+  crown() {
+    notes([88, 91, 96], { type: 'triangle', step: 0.05, dur: 0.25, gain: 0.1 });
+  },
   /** The opponent offers a draw. */
   offer() {
     notes([76, 81], { type: 'triangle', step: 0.12, dur: 0.25, gain: 0.15 });

@@ -7,8 +7,8 @@ The spec leaves these items to Claude Code (**[Claude Code]** in `SPEC.md`, and 
 Macro to micro, with a test checkpoint at the end of each stage. Each mode stage starts with that mode's rule questions and a proposal for its visual effects, for Caleb's review.
 
 1. **Foundation and Standard Chess:** the app shell in the Portal style; the board and piece art; click and drag input; the legal-move and last-move highlight settings; the full Standard rules with the section 6 draws; rooms by code, the room setup (mode, time control), random colors and clocks; resign with confirm, draw offers, disconnect forfeit with a reconnect grace period, Rematch and Back to mode pick; the installable app and publishing. **(done)**
-2. **Audio and Standard's effects:** the sound engine, music, and the capture, check and checkmate effects. The effects plan is shown to Caleb before it is built. This sets up how every later mode plugs in its own effects. **(this stage)**
-3. **Bastille and Pot-Hole.**
+2. **Audio and Standard's effects:** the sound engine, music, and the capture, check and checkmate effects. The effects plan is shown to Caleb before it is built. This sets up how every later mode plugs in its own effects. **(done)**
+3. **Bastille and Pot-Hole.** **(this stage)**
 4. **Remorse and Mega Knight.**
 5. **Bario and Rental.**
 6. **Revival.**
@@ -32,6 +32,8 @@ Macro to micro, with a test checkpoint at the end of each stage. Each mode stage
 | Stage 2 effects (Claude Code's proposal for Standard Chess: captures, check, checkmate, plus every move, castling, promotion, game start, draws, low time and timeout, resignation, and small sounds) | All of them. |
 | Music | Unique music: each mode gets its own game track, plus the menu theme. |
 | The phone's or computer's "reduce motion" setting | Do not follow it: the effects always play in full. |
+| Menu music (Stage 3) | A rendition of Caleb's piano piece (MIDI file). |
+| Stage 3 rule questions, effects and music | "Compose everything. For all the other stuff you can decide what to do": the Bastille and Pot-Hole tracks are Claude Code's, and the six rule readings below are Claude Code's calls (revisable). |
 
 ## Questions for Caleb (from Stage 1)
 
@@ -124,7 +126,7 @@ All answered (see above).
 - All sound is made in the browser with the Web Audio API (`src/lib/audio/`), the same engine as Stickman Arena. There are no audio files.
 - Sound starts after the first tap or key press (a browser rule) and pauses while the app is in the background. Music and effects have their own volume (Settings; defaults 50% and 80%).
 - Music (Caleb's answer: unique music per mode, plus the menu theme):
-  - **Opening**, the menu theme: light and playful, F major, 112 beats a minute, a plucked square-wave lead. Plays on Home, Settings and the room setup.
+  - **Menu theme** (Caleb's request in Stage 3): a rendition of Caleb's piano piece, from the MIDI file he gave. Sixteen seventh chords in C major (Cmaj7, Dm7, Cmaj7, Bm7♭5, Am7, G7, Fmaj7, Em7, Dm7, Cmaj7 and back up), each arpeggiated 1-3-5-7-5-3 twice in quarter notes at 240 beats a minute over a held bass note an octave below the root, on a ringing piano-like voice (the score holds the sustain pedal). The score plays the sixteen chords twice; the theme loops them. Plays on Home, Settings and the room setup. (Replaces "Opening", the Stage 2 menu theme.)
   - **Gambit**, Standard Chess: thoughtful but driving, A minor, 100 beats a minute, a soft triangle lead over a pulsing bass.
   - **Tension layer** (game tracks): four-on-the-floor kicks, running hats and a sawtooth arpeggio fade in while a king is in check or a running clock is under 30 seconds, and fade out when that ends.
   - Each later mode gets its own game track in its own stage (`MODE_TRACK` in `src/modes.ts`).
@@ -147,6 +149,51 @@ Proposed by Claude Code, approved by Caleb ("all effects"). Display only: nothin
 | Low time | In the last ten seconds a running clock turns red and pulses. |
 | Out of time | The empty clock flashes, jolts, and stays red with a cream crack across its face. |
 | Resignation | The resigning player's king slowly tips over and stays down. |
+
+## Bastille and Pot-Hole (Stage 3)
+
+### Claude Code's calls (Caleb: "you can decide"; revisable)
+
+| Question | Choice | Why |
+| --- | --- | --- |
+| Bastille: castling with no check | The orthodox limits stay: no castling while the king is attacked, across an attacked square, or onto one. | The source permits castling; chessvariants.org's castling page says variants on the standard board keep castling unchanged. The Bastille page itself could not be opened from the build machine. |
+| Bastille: running out of time | Always loses. | Section 6 says insufficient material does not apply to Bastille; any piece, even a king, can take a palace. |
+| Pot-Hole: an even roll while a pothole is open (random duration) | Nothing opens. | The base rules allow one pothole at a time. |
+| Pot-Hole: lines through a pothole | A rook, bishop or queen cannot move across a pothole, and its attack (check) stops there too. A knight's does not. | Follows Caleb's rule that only knights pass over a pothole. |
+| Pot-Hole: a move that ends the game | No roll after it. | Otherwise a pothole could open after checkmate. |
+| Pot-Hole: repetition | The open pothole and its turns left are part of the position. | Section 6 counts the pothole; the turns left decide what can move next. |
+| Pot-Hole: a pothole exposes a king | The other player still cannot capture it (kings are royal in Pot-Hole); the exposed king's owner must get out of check on their next turn. | Kings are never captured in orthodox chess; the spec adds nothing here. |
+| Pot-Hole: the fifty-move rule | A piece falling into a pothole does not count as a capture (it does not reset the count). | Only moves are counted by the rule. |
+
+### How the modes work
+
+- **Bastille** (`src/chess/standard.ts`, `status.ts`): kings are not royal, so there is no check and every move that follows the pieces' rules is legal, including moving onto attacked squares and capturing a king. After every move: if a side has none of its own pieces in its palace, the other side wins (even if self-inflicted); both at once is a draw. No legal move: draw. Repetition and the fifty-move rule apply; insufficient material does not.
+- **Pot-Hole** (`src/chess/pothole.ts`): after every move that does not end the game, the host's device rolls (secure random numbers): the open pothole ages first (and closes when its turns are used up), then the six-sided die; on an even roll with no pothole open, two eight-sided rolls pick the square, again if it is a king; a piece there is removed; the pothole is open for 1 turn (base rule) or a six-sided roll of turns (random duration). A turn is one player's move. No piece but a knight crosses or enters a pothole, and castling and en passant obey that too. Mate, stalemate, insufficient material and repetition are judged after the roll.
+- **Mode option:** with Pot-Hole picked, the host chooses "One turn (base rule)" (the default) or "1 to 6 turns (random)"; the guest sees the choice.
+
+### Effects (Caleb: "compose everything" / decide)
+
+| Mode | Moment | Effect |
+| --- | --- | --- |
+| Bastille | Always | Each palace has a crenellated navy wall around its four squares. |
+| Bastille | Last defender | When a palace is down to one of its own pieces, its wall turns red and pulses. |
+| Bastille | Palace falls | The wall breaks into flying navy and red bricks with a dust cloud, a heavy shake, and the stripe banner "PALACE FALLS" ("BOTH PALACES FALL" for the draw); the empty palace's wall stays as a faded, broken outline. Then a fanfare or a low sting. |
+| Bastille | King captured | The usual capture, plus the king's cross flies up spinning with a red ring and a chime. |
+| Pot-Hole | Every roll | A six-sided die tumbles across the board and lands on its number (red pips when even). |
+| Pot-Hole | A pothole opens | Two eight-sided dice roll in with the file letter and rank number; a red crosshair drops on the square ("RE-ROLL" stamp each time it lands on a king); the square cracks with dust and a shake; a piece there spins and shrinks into the pit with a falling whistle. The board shows the pit only from that moment. |
+| Pot-Hole | Open | A dark pit with a broken earth rim; in random duration, cream pips show the turns left. |
+| Pot-Hole | Closes | A grey asphalt patch slams down over it with a puff. |
+
+### Music
+
+- **Storming** (Bastille Chess): a revolutionary march, G minor, 120 beats a minute, a square-wave fife lead over snare-heavy drums. Tension: a snare roll and a sawtooth arpeggio.
+- **Bumpy Road** (Pot-Hole Chess): a lurching, swung tune in D, 104 beats a minute, a bouncing octave bass and a lead that keeps jumping. Tension: doubled kicks and a square-wave arpeggio.
+
+## Testing (Stage 3)
+
+- `npm run check:rules` adds 10 Bastille checks (no check, king capture, palace wins including self-inflicted and both-at-once, castling) and 18 Pot-Hole checks (blocked lines, knights jumping, pawns, castling, checks across a pothole, kings not capturable, dice: odd roll, re-roll off a king, closing, random duration, one at a time, repetition).
+- Two-browser run: a Bastille game where Black empties its own palace (White wins, both screens), the Pot-Hole random-duration option seen by the guest, and a Pot-Hole game played until potholes opened and closed, with host and guest showing the same pothole. Frames of every new effect checked by eye; no errors in either console. The Stage 1 test still passes (its one check that Bastille is locked now fails, as it should).
+- The new music and sounds could not be listened to from the build machine.
 
 ## Testing (Stage 1)
 

@@ -3,7 +3,8 @@ import { findKing } from '../chess/standard';
 import { other, type Color, type Piece } from '../chess/types';
 import { PIECE_VALUE } from '../lib/audio/sfx';
 import { CREAM, INK, drawPiece } from '../board/pieceShapes';
-import { SLIDE_MS, onFx, type FxEvent } from './fx';
+import { ROLL, SLIDE_MS, onFx, openAt, type FxEvent } from './fx';
+import type { Roll } from '../chess/pothole';
 
 // Standard Chess's effects (Caleb approved all of them in Stage 2), drawn on two
 // canvases over the whole screen: one behind the board (the checkmate rays) and
@@ -160,8 +161,13 @@ function handle(e: FxEvent, add: Add, kick: Kick) {
     return;
   }
   const g = boardGeom();
-  if (e.t === 'end' && e.result.winner === null) banner(add, DRAW_BANNER[e.result.reason] ?? 'Draw', (e.afterMove ? SLIDE_MS + 260 : 0) + 300, 1800);
+  if (e.t === 'end' && e.result.winner === null && e.result.reason !== 'palaceBoth')
+    banner(add, DRAW_BANNER[e.result.reason] ?? 'Draw', (e.afterMove ? SLIDE_MS + 260 : 0) + e.extraDelay + 300, 1800);
   if (!g) return;
+  if (e.t === 'roll') {
+    dice(add, kick, g, e.roll);
+    return;
+  }
   if (e.t === 'move') {
     const { m } = e;
     const to = g.center(m.to);
@@ -182,6 +188,8 @@ function handle(e: FxEvent, add: Add, kick: Kick) {
       shatter(add, m.captured, at.x, at.y, g.sq, SLIDE_MS);
       spark(add, at.x, at.y, g.sq * (1 + value * 0.12), SLIDE_MS, RED);
       kick(3 + value * 1.6, SLIDE_MS);
+      // Bastille: kings are not royal and can be taken; the crown flies off.
+      if (m.captured.kind === 'K') crown(add, m.captured.color, at.x, at.y, g.sq, SLIDE_MS + 60);
     }
     ring(add, g, m.to, SLIDE_MS);
     if (m.promo) promotion(add, to.x, to.y, g, SLIDE_MS);
@@ -196,7 +204,15 @@ function handle(e: FxEvent, add: Add, kick: Kick) {
   }
   // The end of the game.
   const { result, pos } = e;
-  const delay = e.afterMove ? SLIDE_MS + 260 : 0;
+  const delay = (e.afterMove ? SLIDE_MS + 260 : 0) + e.extraDelay;
+  if (result.reason === 'palace' || result.reason === 'palaceBoth') {
+    // Bastille: the emptied palace's walls crumble.
+    const fallen: Color[] = result.winner ? [other(result.winner)] : ['w', 'b'];
+    for (const c of fallen) crumble(add, g, c, delay);
+    kick(18, delay);
+    banner(add, fallen.length === 2 ? 'Both palaces fall' : 'Palace falls', delay + 250, 1900);
+    return;
+  }
   if (result.reason === 'checkmate' && result.winner) {
     const loser = other(result.winner);
     const k = g.center(findKing(pos, loser));
@@ -217,6 +233,306 @@ const DRAW_BANNER: Record<string, string> = {
 };
 
 // ---------------------------------------------------------------- the effects
+
+/** Bastille: a palace's crenellated walls break into bricks that fly and fall. */
+function crumble(add: Add, g: Geom, color: Color, delay: number) {
+  const el = document.querySelector<HTMLElement>('[data-board]');
+  const flip = el?.dataset.board === 'b';
+  const topRow = (color === 'w') !== flip ? 6 : 0;
+  const x0 = g.x + 3 * g.sq;
+  const y0 = g.y + topRow * g.sq;
+  const w = 2 * g.sq;
+  const bricks: { x: number; y: number; vx: number; vy: number; spin: number; s: number; red: boolean }[] = [];
+  const edge = (x: number, y: number) =>
+    bricks.push({ x, y, vx: (x - (x0 + w / 2)) * rand(2, 5) + rand(-1, 1) * g.sq, vy: (y - (y0 + w / 2)) * rand(2, 4) - g.sq * rand(4, 9), spin: rand(-10, 10), s: g.sq * rand(0.12, 0.22), red: Math.random() < 0.25 });
+  for (let i = 0; i <= 10; i++) {
+    edge(x0 + (i / 10) * w, y0);
+    edge(x0 + (i / 10) * w, y0 + w);
+    edge(x0, y0 + (i / 10) * w);
+    edge(x0 + w, y0 + (i / 10) * w);
+  }
+  const gravity = g.sq * 26;
+  add({
+    layer: 'front',
+    delay,
+    life: 1500,
+    draw(ctx, age, k) {
+      const t = age / 1000;
+      ctx.globalAlpha = fadeOut(k, 0.55);
+      // A cloud of dust over the palace.
+      ctx.fillStyle = 'rgb(159 171 184 / 0.5)';
+      ctx.beginPath();
+      ctx.arc(x0 + w / 2, y0 + w / 2, w * (0.5 + 0.6 * easeOut(k)), 0, Math.PI * 2);
+      ctx.fill();
+      for (const b of bricks) {
+        ctx.save();
+        ctx.translate(b.x + b.vx * t, b.y + b.vy * t + 0.5 * gravity * t * t);
+        ctx.rotate(b.spin * t);
+        ctx.fillStyle = b.red ? RED : INK;
+        ctx.fillRect(-b.s / 2, -b.s / 3, b.s, (b.s * 2) / 3);
+        ctx.strokeStyle = SURFACE;
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(-b.s / 2, -b.s / 3, b.s, (b.s * 2) / 3);
+        ctx.restore();
+      }
+    },
+  });
+}
+
+/** Bastille: a captured king's crown (its cross) flies up spinning. */
+function crown(add: Add, color: Color, cx: number, cy: number, sq: number, delay: number) {
+  const vx = rand(-1, 1) * sq * 2;
+  add({
+    layer: 'front',
+    delay,
+    life: 1100,
+    draw(ctx, age, k) {
+      const t = age / 1000;
+      const x = cx + vx * t;
+      const y = cy - sq * 0.3 - sq * 7 * t + 0.5 * sq * 18 * t * t;
+      ctx.globalAlpha = fadeOut(k, 0.6);
+      ctx.translate(x, y);
+      ctx.rotate(t * 9);
+      const u = sq * 0.08;
+      ctx.fillStyle = color === 'w' ? SURFACE : INK;
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.rect(-u, -u * 3, u * 2, u * 6);
+      ctx.rect(-u * 3, -u * 1.5, u * 6, u * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.strokeStyle = RED;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(0, 0, u * 5 * (0.6 + k), 0, Math.PI * 2);
+      ctx.stroke();
+    },
+  });
+}
+
+/**
+ * Pot-Hole's dice: a six-sided die tumbles across the board and lands; on an
+ * even roll two eight-sided dice (file, rank) roll, a crosshair drops on the
+ * square (a RE-ROLL stamp each time it lands on a king), the square cracks
+ * open and a piece on it falls in. A pothole that closed is patched first.
+ */
+function dice(add: Add, kick: Kick, g: Geom, roll: Roll) {
+  const mid = { x: g.x + g.size / 2, y: g.y + g.size / 2 };
+  if (roll.closed !== null) patch(add, g, roll.closed);
+  // The six-sided die.
+  const d6Size = g.sq * 1.1;
+  const from = { x: g.x - g.sq, y: g.y + g.size * 0.8 };
+  add({
+    layer: 'front',
+    delay: ROLL.dieStart,
+    life: (roll.opened !== null ? ROLL.d8Start : ROLL.dieLand + 450) - ROLL.dieStart,
+    draw(ctx, age, k) {
+      const travel = ROLL.dieLand - ROLL.dieStart;
+      const p = Math.min(1, age / travel);
+      const e = easeOut(p);
+      const bounce = Math.abs(Math.sin(p * Math.PI * 3)) * (1 - p) * g.sq * 1.2;
+      const x = from.x + (mid.x - from.x) * e;
+      const y = from.y + (mid.y - from.y) * e - bounce;
+      const face = p < 1 ? 1 + (Math.floor(age / 60) % 6) : roll.d6;
+      ctx.globalAlpha = p < 1 ? 1 : fadeOut(k, 0.7);
+      ctx.translate(x, y);
+      ctx.rotate((1 - e) * Math.PI * 4);
+      dieFace(ctx, d6Size, face, p >= 1 && roll.d6 % 2 === 0);
+    },
+  });
+  if (roll.opened === null) return;
+  // Each try: two eight-sided dice, then a crosshair on the square they picked.
+  roll.tries.forEach((s, i) => {
+    const base = i * ROLL.reroll;
+    const landed = s === roll.opened;
+    const file = 'abcdefgh'[s & 7];
+    const rank = String((s >> 3) + 1);
+    [file, rank].forEach((label, j) => {
+      const start = { x: g.x + g.size + g.sq, y: g.y + g.size * (0.3 + j * 0.25) };
+      const end = { x: mid.x + (j ? 0.75 : -0.75) * g.sq, y: mid.y };
+      add({
+        layer: 'front',
+        delay: ROLL.d8Start + base,
+        life: ROLL.cross + 250 - ROLL.d8Start,
+        draw(ctx, age, k) {
+          const travel = ROLL.d8Land - ROLL.d8Start;
+          const p = Math.min(1, age / travel);
+          const e = easeOut(p);
+          const x = start.x + (end.x - start.x) * e;
+          const y = start.y + (end.y - start.y) * e - Math.abs(Math.sin(p * Math.PI * 2)) * (1 - p) * g.sq;
+          ctx.globalAlpha = fadeOut(k, 0.75);
+          ctx.translate(x, y);
+          ctx.rotate((1 - e) * -Math.PI * 3);
+          d8Face(ctx, g.sq * 0.95, p < 1 ? (j ? String(1 + (Math.floor(age / 55) % 8)) : 'abcdefgh'[Math.floor(age / 55) % 8]) : label);
+        },
+      });
+    });
+    const c = g.center(s);
+    add({
+      layer: 'front',
+      delay: ROLL.cross + base,
+      life: landed ? ROLL.open - ROLL.cross + 150 : ROLL.reroll,
+      draw(ctx, age) {
+        const drop = Math.min(1, age / 150);
+        const r = g.sq * (1.6 - 1.1 * easeOut(drop));
+        ctx.strokeStyle = RED;
+        ctx.lineWidth = g.sq * 0.06;
+        ctx.globalAlpha = drop;
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, r * 0.55, 0, Math.PI * 2);
+        ctx.moveTo(c.x - r, c.y);
+        ctx.lineTo(c.x + r, c.y);
+        ctx.moveTo(c.x, c.y - r);
+        ctx.lineTo(c.x, c.y + r);
+        ctx.stroke();
+        if (!landed && age > 160) {
+          // Landed on a king: re-roll.
+          ctx.translate(c.x, c.y - g.sq * 0.9);
+          ctx.rotate(-0.12);
+          ctx.fillStyle = RED;
+          ctx.fillRect(-g.sq * 0.95, -g.sq * 0.28, g.sq * 1.9, g.sq * 0.56);
+          ctx.fillStyle = SURFACE;
+          ctx.font = `400 ${Math.round(g.sq * 0.36)}px Norwester, sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('RE-ROLL', 0, g.sq * 0.02);
+        }
+      },
+    });
+  });
+  // The square cracks open; a piece on it falls in.
+  const open = openAt(roll)!;
+  const c = g.center(roll.opened);
+  const piece = roll.removed;
+  if (piece) {
+    const dpr = window.devicePixelRatio || 1;
+    const img = document.createElement('canvas');
+    img.width = img.height = Math.ceil(g.sq * dpr);
+    const ictx = img.getContext('2d');
+    if (ictx) {
+      ictx.scale(dpr, dpr);
+      drawPiece(ictx, piece.color, piece.kind, 0, 0, g.sq);
+      // Until the pit opens, the piece still stands on its square (the board no longer shows it).
+      add({ layer: 'front', life: open, draw: (ctx) => ctx.drawImage(img, c.x - g.sq / 2, c.y - g.sq / 2, g.sq, g.sq) });
+      add({
+        layer: 'front',
+        delay: open,
+        life: 650,
+        draw(ctx, _age, k) {
+          const s = 1 - easeOut(k) * 0.9;
+          ctx.globalAlpha = 1 - k * 0.6;
+          ctx.translate(c.x, c.y + k * g.sq * 0.15);
+          ctx.rotate(k * 6);
+          ctx.drawImage(img, (-g.sq * s) / 2, (-g.sq * s) / 2, g.sq * s, g.sq * s);
+        },
+      });
+    }
+  }
+  // Cracks spread out from the square, dust bursts.
+  const cracks = Array.from({ length: 7 }, (_, i) => ({ a: (i / 7) * Math.PI * 2 + rand(-0.3, 0.3), l: rand(0.7, 1.4) }));
+  add({
+    layer: 'front',
+    delay: open,
+    life: 800,
+    draw(ctx, _age, k) {
+      ctx.globalAlpha = fadeOut(k, 0.4);
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = g.sq * 0.05;
+      ctx.lineCap = 'round';
+      for (const cr of cracks) {
+        const len = g.sq * cr.l * easeOut(Math.min(1, k * 3));
+        ctx.beginPath();
+        ctx.moveTo(c.x + Math.cos(cr.a) * g.sq * 0.35, c.y + Math.sin(cr.a) * g.sq * 0.35);
+        ctx.lineTo(c.x + Math.cos(cr.a + 0.25) * len * 0.6, c.y + Math.sin(cr.a + 0.25) * len * 0.6);
+        ctx.lineTo(c.x + Math.cos(cr.a) * len, c.y + Math.sin(cr.a) * len);
+        ctx.stroke();
+      }
+      ctx.fillStyle = 'rgb(107 86 64 / 0.45)';
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, g.sq * (0.4 + 0.9 * easeOut(k)), 0, Math.PI * 2);
+      ctx.fill();
+    },
+  });
+  kick(9, open);
+}
+
+/** A pothole closes: an asphalt patch slams down with a puff. */
+function patch(add: Add, g: Geom, s: number) {
+  const c = g.center(s);
+  add({
+    layer: 'front',
+    life: 600,
+    draw(ctx, _age, k) {
+      const drop = Math.min(1, k / 0.25);
+      const size = g.sq * (1.6 - 0.65 * easeOut(drop));
+      ctx.globalAlpha = k < 0.25 ? 1 : fadeOut(k, 0.3);
+      ctx.fillStyle = '#4a4f57';
+      ctx.fillRect(c.x - size / 2, c.y - size / 2, size, size);
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(c.x - size / 2, c.y - size / 2, size, size);
+      if (k > 0.25) {
+        ctx.fillStyle = 'rgb(159 171 184 / 0.6)';
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, g.sq * (0.5 + (k - 0.25) * 1.2), 0, Math.PI * 2);
+        ctx.fill();
+      }
+    },
+  });
+}
+
+/** A six-sided die face with pips (red pips on an even roll once it has landed). */
+function dieFace(ctx: CanvasRenderingContext2D, size: number, n: number, red: boolean) {
+  const h = size / 2;
+  ctx.fillStyle = SURFACE;
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = size * 0.07;
+  ctx.beginPath();
+  ctx.roundRect(-h, -h, size, size, size * 0.18);
+  ctx.fill();
+  ctx.stroke();
+  const at: Record<number, [number, number][]> = {
+    1: [[0, 0]],
+    2: [[-1, -1], [1, 1]],
+    3: [[-1, -1], [0, 0], [1, 1]],
+    4: [[-1, -1], [1, -1], [-1, 1], [1, 1]],
+    5: [[-1, -1], [1, -1], [0, 0], [-1, 1], [1, 1]],
+    6: [[-1, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [1, 1]],
+  };
+  ctx.fillStyle = red ? RED : INK;
+  for (const [x, y] of at[n]) {
+    ctx.beginPath();
+    ctx.arc(x * size * 0.26, y * size * 0.26, size * 0.09, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+/** An eight-sided die, drawn as a diamond with its letter or number. */
+function d8Face(ctx: CanvasRenderingContext2D, size: number, label: string) {
+  const h = size / 2;
+  ctx.fillStyle = INK;
+  ctx.strokeStyle = SURFACE;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(0, -h);
+  ctx.lineTo(h * 0.85, 0);
+  ctx.lineTo(0, h);
+  ctx.lineTo(-h * 0.85, 0);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(-h * 0.85, 0);
+  ctx.lineTo(h * 0.85, 0);
+  ctx.strokeStyle = 'rgb(250 238 218 / 0.35)';
+  ctx.stroke();
+  ctx.fillStyle = SURFACE;
+  ctx.font = `400 ${Math.round(size * 0.42)}px Norwester, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(label.toUpperCase(), 0, size * 0.02);
+}
 
 /** The captured piece: drawn whole until impact, a split-second freeze with a flash, then flat shards fly off and fall. */
 function shatter(add: Add, piece: Piece, cx: number, cy: number, size: number, impact: number) {
