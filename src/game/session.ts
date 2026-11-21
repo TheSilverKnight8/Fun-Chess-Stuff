@@ -7,8 +7,9 @@
 // answers, and shows its own moves at once while the host confirms them.
 
 import { other, type Color, type Move } from '../chess/types';
-import { findLegal, play } from '../chess/standard';
+import { findLegal, legalMoves, play } from '../chess/standard';
 import { createStore } from '../lib/store';
+import type { CpuAction, Level } from '../cpu/brain';
 import type { ModeId } from '../modes';
 import { Room, RoomError, type RoomMessage } from '../net/room';
 import {
@@ -71,6 +72,8 @@ export interface RoomScreen {
   myColor: Color | null;
   /** Guest: lost the host, trying to get back until this time (performance.now()). */
   reconnecting: number | null;
+  /** A game against the CPU (no room): its level. */
+  cpu: Level | null;
 }
 
 const DEFAULT_SETUP: Setup = { mode: 'standard', time: null, options: DEFAULT_OPTIONS };
@@ -88,6 +91,7 @@ const blank: RoomScreen = {
   gameAt: 0,
   myColor: null,
   reconnecting: null,
+  cpu: null,
 };
 
 export const roomStore = createStore<RoomScreen>({ ...blank });
@@ -185,6 +189,8 @@ export async function joinRoom(code: string) {
 /** Leaves the room (and with it any game in progress, which the other side then wins). */
 export function leaveRoom() {
   generation++;
+  window.clearTimeout(cpuTimer);
+  cpuAsk++;
   window.clearTimeout(awayTimer);
   window.clearTimeout(flagTimer);
   window.clearInterval(watchdog);
@@ -325,6 +331,77 @@ function publish() {
   patch({ setup, game, gameAt: t, myColor: match?.hostColor ?? null });
   room?.send({ t: 'state', setup, phase: roomStore.get().phase, game });
   scheduleFlag();
+  scheduleCpu();
+}
+
+// ---------------------------------------------------------------- the CPU
+
+/** Starts a game screen against the CPU: the player is the host, the CPU takes the other seat. Works offline. */
+export function startCpu(level: Level = 'normal') {
+  leaveRoom();
+  match = null;
+  setup = DEFAULT_SETUP;
+  gamesPlayed = 0;
+  roomStore.set({ ...blank, status: 'open', role: 'host', opponentHere: true, cpu: level });
+  publish();
+}
+
+export function setCpuLevel(level: Level) {
+  if (roomStore.get().cpu) patch({ cpu: level });
+}
+
+let worker: Worker | null = null;
+let cpuAsk = 0;
+let cpuTimer: number | undefined;
+
+/** When it is the CPU's turn (or its piece to place), ask the worker, then play its answer after a short pause. */
+function scheduleCpu() {
+  const s = roomStore.get();
+  if (!s.cpu || !match || match.result) return;
+  const cpuColor = other(match.hostColor);
+  if (actorOf(match.game.pos) !== cpuColor) return;
+  const ask = ++cpuAsk;
+  const askedAt = now();
+  const pos = match.game.pos;
+  worker ??= new Worker(new URL('../cpu/worker.ts', import.meta.url), { type: 'module' });
+  worker.onmessage = (e: MessageEvent<{ id: number; action: CpuAction | null }>) => {
+    if (e.data.id !== cpuAsk) return;
+    const wait = Math.max(0, (s.cpu === 'easy' ? 450 : 650) - (now() - askedAt));
+    window.clearTimeout(cpuTimer);
+    cpuTimer = window.setTimeout(() => cpuPlay(e.data.action), wait);
+  };
+  worker.postMessage({ id: ask, pos, level: s.cpu, cpu: cpuColor });
+}
+
+function cpuPlay(a: CpuAction | null) {
+  if (!match || match.result || !a) return;
+  const c = other(match.hostColor);
+  const t = now();
+  let next: MatchState | null = null;
+  if (a.t === 'move') next = moveIn(match, c, a.move, null, t, dice);
+  else if (a.t === 'roll') next = rollIn(match, c, null, t, dice);
+  else if (a.t === 'skip') next = skipIn(match, c, null, t);
+  else if (a.t === 'evict') next = evictIn(match, c, a.sq, null, t);
+  else if (a.t === 'place') next = placeIn(match, c, a.sq, null, t);
+  // A safety net: if the answer could not be played, play any legal move (or roll) so the game never stalls.
+  if (!next) {
+    const pos = match.game.pos;
+    const head = pos.revival?.queue[0];
+    if (head) next = placeIn(match, c, head.options[0], null, t);
+    else if (pos.rental?.owed != null) {
+      const s0 = pos.board.findIndex((p) => p?.color === c && p.kind !== 'K');
+      if (s0 >= 0) next = evictIn(match, c, s0, null, t);
+    } else {
+      const ms = legalMoves(pos);
+      if (ms.length) next = moveIn(match, c, { from: ms[0].from, to: ms[0].to, promo: ms[0].promo, mk: ms[0].mk, define: ms[0].define, board: ms[0].board }, null, t, dice);
+      else if (pos.variant === 'megaknight') next = rollIn(match, c, null, t, dice);
+      else if (pos.extra != null) next = skipIn(match, c, null, t);
+    }
+  }
+  if (next) {
+    match = next;
+    publish();
+  }
 }
 
 /** Ends the game when the side to move runs out of time. */

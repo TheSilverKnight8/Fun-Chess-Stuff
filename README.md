@@ -10,7 +10,7 @@ The app is built in stages, each tried before the next starts. What the app does
 
 | Area | What it does |
 | --- | --- |
-| Home | Create a room, or join one with its 5-character code. Settings. |
+| Home | Create a room, join one with its 5-character code, play the CPU (Easy, Normal or Hard, every mode, works offline), Manuals, Settings. |
 | Room setup | The host picks the mode and the time control while waiting for the opponent; the guest sees the picks live. All eight modes are playable (Pot-Hole has the host's pothole-duration option). Untimed, ten presets, or a custom time with increment. |
 | Standard Chess | Full orthodox rules: castling, en passant, promotion with a piece picker, check and checkmate. Draws by stalemate, threefold repetition, the fifty-move rule and insufficient material end the game by themselves; draw offers and resignation (with a confirm). Running out of time loses, or draws if the opponent cannot checkmate. |
 | Playing | Click a piece then a square, or drag it. Your color is at the bottom with "You are White/Black" beside it. Colors are random; Rematch swaps them. Only the host chooses Rematch or Back to mode pick. |
@@ -79,8 +79,9 @@ src/
   components/   page frames, buttons, dialogs
   graphics/     app icon, Croswell Industries logo
   lib/          settings, small shared store
+  cpu/          the CPU opponent (search and evaluation) and the worker it thinks in
   modes.ts      the eight modes and the stage each arrives in
-scripts/        check-rules (perft and endings)
+scripts/        check-rules (perft and endings), check-cpu (CPU against CPU in every mode)
 docs/           the builder's decisions
 ```
 

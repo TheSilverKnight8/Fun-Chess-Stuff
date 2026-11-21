@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { BookOpen, DoorOpen, LogIn, Settings as SettingsIcon } from 'lucide-react';
+import { Bot, BookOpen, DoorOpen, LogIn, Settings as SettingsIcon } from 'lucide-react';
 import { useMusic } from '../lib/audio/useMusic';
 import { PageLayout } from '../components/Layout';
 import { Button, ButtonLink, Card } from '../components/ui';
@@ -78,6 +78,10 @@ export function Home() {
           </form>
         </Card>
         <div className="grid content-start gap-5">
+          <ButtonLink to="/cpu" size="lg" variant="navy" press className="w-full animate-rise" style={{ animationDelay: '80ms' }}>
+            <Bot className="size-5" />
+            Play the CPU
+          </ButtonLink>
           <ButtonLink to="/guide" size="lg" press className="w-full animate-rise border-2 border-navy" style={{ animationDelay: '100ms' }}>
             <BookOpen className="size-5" />
             Manuals

@@ -6,6 +6,7 @@ import { useGameManual } from '../guide/Guide';
 import { EffectsLayer } from '../effects/EffectsLayer';
 import { useClockTicks, useGameFx } from '../effects/useGameFx';
 import { useRevival } from '../effects/useRevival';
+import type { Level } from '../cpu/brain';
 import { setTension } from '../lib/audio/music';
 import { sfx } from '../lib/audio/sfx';
 import { useMusic } from '../lib/audio/useMusic';
@@ -31,6 +32,8 @@ import {
   playerResign,
   rematch,
   roomStore,
+  setCpuLevel,
+  startCpu,
   setSetup,
   startGame,
   type RoomScreen,
@@ -39,6 +42,16 @@ import { CUSTOM_LIMITS, PRESETS, formatClock, sameTime, timeLabel, type TimeCont
 import { useSettings } from '../lib/settings';
 import { useStore } from '../lib/store';
 import { MODES, MODE_TRACK, modeInfo } from '../modes';
+
+/** A game against the CPU: the same screens as a room, with the CPU in the other seat. */
+export function CpuPage() {
+  const s = useStore(roomStore);
+  useEffect(() => {
+    if (!roomStore.get().cpu) startCpu();
+  }, []);
+  if (!s.cpu) return null;
+  return <RoomPage />;
+}
 
 /** The room: the host's setup (mode and time control), then the game. */
 export function RoomPage() {
@@ -100,6 +113,7 @@ function Connecting({ s }: { s: RoomScreen }) {
 function SetupScreen({ s }: { s: RoomScreen }) {
   useMusic('menu');
   const host = s.role === 'host';
+  if (s.cpu) return <CpuSetup s={s} />;
   return (
     <PageLayout back={{ to: '/', label: 'Leave room' }}>
       <PageTitle eyebrow={`Room ${s.code}`} title={host ? 'Set up the game' : 'The host is setting up'}>
@@ -127,43 +141,99 @@ function SetupScreen({ s }: { s: RoomScreen }) {
         </div>
 
         <div className="grid content-start gap-5">
-          <Card className="p-5">
-            <p className="label-caps text-muted">Mode</p>
-            <div className="mt-3 grid gap-2">
-              {MODES.map((m) => {
-                const chosen = s.setup.mode === m.id;
-                const locked = m.stage !== null;
-                return (
-                  <button
-                    key={m.id}
-                    type="button"
-                    disabled={!host || locked}
-                    onClick={() => {
-                      sfx.click();
-                      setSetup({ mode: m.id });
-                    }}
-                    className={cx(
-                      'flex items-start gap-3 rounded-xl border-2 px-4 py-3 text-left transition',
-                      chosen ? 'border-navy bg-raised' : 'border-line bg-surface',
-                      host && !locked && !chosen && 'hover:border-navy/50',
-                      locked && 'opacity-55',
-                      !host && 'cursor-default',
-                    )}
-                  >
-                    <span className={cx('mt-1 size-3 shrink-0 rounded-sm', chosen ? 'bg-accent' : 'bg-line')} />
-                    <span className="min-w-0 flex-1">
-                      <span className="block font-display text-xl uppercase leading-tight">{m.name}</span>
-                      {m.author && <span className="block text-xs text-muted">{m.author}</span>}
-                      <span className="mt-1 block text-sm text-muted">{m.blurb}</span>
-                    </span>
-                    {locked && <Chip className="shrink-0">Stage {m.stage}</Chip>}
-                  </button>
-                );
-              })}
-            </div>
-          </Card>
+          <ModeList s={s} host={host} />
           {s.setup.mode === 'pothole' && <PotholeOptions value={s.setup.options.potholeDuration} host={host} />}
           <TimePicker value={s.setup.time} host={host} />
+        </div>
+      </div>
+    </PageLayout>
+  );
+}
+
+/** The mode list (the host picks; the guest sees the pick). */
+function ModeList({ s, host }: { s: RoomScreen; host: boolean }) {
+  return (
+          <Card className="p-5">
+      <p className="label-caps text-muted">Mode</p>
+      <div className="mt-3 grid gap-2">
+        {MODES.map((m) => {
+          const chosen = s.setup.mode === m.id;
+          const locked = m.stage !== null;
+          return (
+            <button
+              key={m.id}
+              type="button"
+              disabled={!host || locked}
+              onClick={() => {
+                sfx.click();
+                setSetup({ mode: m.id });
+              }}
+              className={cx(
+                'flex items-start gap-3 rounded-xl border-2 px-4 py-3 text-left transition',
+                chosen ? 'border-navy bg-raised' : 'border-line bg-surface',
+                host && !locked && !chosen && 'hover:border-navy/50',
+                locked && 'opacity-55',
+                !host && 'cursor-default',
+              )}
+            >
+              <span className={cx('mt-1 size-3 shrink-0 rounded-sm', chosen ? 'bg-accent' : 'bg-line')} />
+              <span className="min-w-0 flex-1">
+                <span className="block font-display text-xl uppercase leading-tight">{m.name}</span>
+                {m.author && <span className="block text-xs text-muted">{m.author}</span>}
+                <span className="mt-1 block text-sm text-muted">{m.blurb}</span>
+              </span>
+              {locked && <Chip className="shrink-0">Stage {m.stage}</Chip>}
+            </button>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
+const LEVEL_TEXT: Record<Level, string> = {
+  easy: 'Mostly random moves, but it takes what you leave hanging.',
+  normal: 'Looks two moves ahead.',
+  hard: 'Looks up to four moves ahead.',
+};
+
+/** The setup for a game against the CPU: mode, options, time control, difficulty. */
+function CpuSetup({ s }: { s: RoomScreen }) {
+  const level = s.cpu!;
+  return (
+    <PageLayout back={{ to: '/', label: 'Home' }}>
+      <PageTitle eyebrow="Play the CPU" title="Set up the game">
+        Pick the mode, the time control and how strong the CPU is. Colors are drawn at random. Works without an internet connection.
+      </PageTitle>
+      <div className="mt-8 grid gap-5 lg:grid-cols-[2fr_3fr]">
+        <div className="grid content-start gap-5">
+          <Card className="p-5">
+            <p className="label-caps text-muted">Difficulty</p>
+            <Segmented
+              className="mt-3 w-full"
+              label="Difficulty"
+              value={level}
+              onChange={(v) => {
+                sfx.click();
+                setCpuLevel(v);
+              }}
+              options={[
+                { value: 'easy', label: 'Easy' },
+                { value: 'normal', label: 'Normal' },
+                { value: 'hard', label: 'Hard' },
+              ]}
+            />
+            <p className="mt-2 text-sm text-muted">{LEVEL_TEXT[level]}</p>
+            <Button variant="primary" size="xl" press className="mt-5 w-full" onClick={startGame}>
+              <Play className="size-6" />
+              Start the game
+            </Button>
+          </Card>
+        </div>
+        <div className="grid content-start gap-5">
+          <ModeList s={s} host />
+          {s.setup.mode === 'pothole' && <PotholeOptions value={s.setup.options.potholeDuration} host />}
+          <TimePicker value={s.setup.time} host />
         </div>
       </div>
     </PageLayout>
@@ -382,7 +452,7 @@ function GameScreen({ s, game, onLeave }: { s: RoomScreen; game: GameView; onLea
     </div>
   );
   const opponentBar = (
-    <PlayerBar color={them} mine={false} clock={clockOf(them)} toMove={!over && game.pos.turn === them} note={opponentNote(s, game, them, elapsed)} cracked={flagged === them} money={game.pos.rental?.treasury[them] ?? null} />
+    <PlayerBar color={them} mine={false} cpu={s.cpu} clock={clockOf(them)} toMove={!over && game.pos.turn === them} note={opponentNote(s, game, them, elapsed)} cracked={flagged === them} money={game.pos.rental?.treasury[them] ?? null} />
   );
   const myBar = <PlayerBar color={me} mine clock={clockOf(me)} toMove={!over && game.pos.turn === me} note={myNote(s, game, me)} cracked={flagged === me} money={game.pos.rental?.treasury[me] ?? null} />;
   const revivalBar = revival ? <RevivalBar game={game} me={me} view={rv.view} onView={(v) => rv.setView(v)} /> : null;
@@ -491,7 +561,7 @@ function myNote(s: RoomScreen, game: GameView, me: Color): ReactNode {
   return game.pos.turn === me ? <span className="text-accent">Your move</span> : null;
 }
 
-function PlayerBar({ color, mine, clock, toMove, note, cracked = false, money = null }: { color: Color; mine: boolean; clock: number | null; toMove: boolean; note: ReactNode; cracked?: boolean; money?: number | null }) {
+function PlayerBar({ color, mine, clock, toMove, note, cracked = false, money = null, cpu = null }: { color: Color; mine: boolean; clock: number | null; toMove: boolean; note: ReactNode; cracked?: boolean; money?: number | null; cpu?: Level | null }) {
   const low = clock !== null && clock < 10_000;
   return (
     <div className={cx('flex items-center gap-3 rounded-xl border-2 bg-surface px-3 py-2', mine ? 'border-navy' : 'border-line')}>
@@ -500,7 +570,7 @@ function PlayerBar({ color, mine, clock, toMove, note, cracked = false, money = 
       </span>
       <div className="min-w-0 flex-1">
         {/* The spec's color indicator: always shown in full, never cut short. */}
-        <p className="font-display text-xl uppercase leading-none">{mine ? `You are ${COLOR_NAME[color]}` : `Opponent · ${COLOR_NAME[color]}`}</p>
+        <p className="font-display text-xl uppercase leading-none">{mine ? `You are ${COLOR_NAME[color]}` : `${cpu ? `CPU (${cpu})` : 'Opponent'} · ${COLOR_NAME[color]}`}</p>
         <p className="mt-1 h-4 truncate text-xs text-muted">{note}</p>
       </div>
       {/* Rental: the treasury. */}

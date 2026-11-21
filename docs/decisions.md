@@ -40,6 +40,7 @@ Macro to micro, with a test checkpoint at the end of each stage. Each mode stage
 | Revival's rules (Stage 6) | Claude Code's picks 1–9 below; Caleb answered with the view design and did not change them. |
 | Mega Knight: four failed rolls repeat the position (asked after Stage 5) | Caleb: "you decide". A roll that does nothing does not count as another occurrence of the position for threefold repetition; repetitions come from moves. It still counts as a move for the fifty-move rule (spec). |
 | Revival: where the view ends up after pieces change boards | Caleb: "you decide". After the arrival effect the view goes back to the board the player last chose with the button (the main board unless they flipped), unless they have a piece to place (then it stays on that piece's board). |
+| A CPU opponent (after Stage 6) | Caleb: "I would like one with three difficulty levels", which overrides the spec's "No CPU opponent" (SPEC section 2; SPEC.md itself is Caleb's and is left as written). Claude Code's plan, approved ("go ahead"): every mode, Easy / Normal / Hard, the same setup screen as a room plus a difficulty, random colors, clocks as usual, works offline. |
 
 ## Questions for Caleb (from Stage 1)
 
@@ -322,6 +323,20 @@ Manuals for both modes, with scenes, are in the guidebook.
 
 - `npm run check:rules` adds 12 Revival checks: skipping an empty board, a main-board capture waiting for its owner's choice and being placed, one starting square placing at once, an auxiliary capture (victim gone, capturer waiting to choose b1 or g1, then returning), making room (owner chooses, the removed piece going to the auxiliary board for its owner to place), bishops' colours and promoted pieces' squares, and checkmate.
 - Two-browser run: exd5 sending a pawn to the auxiliary board with Black's view switching and Black choosing e7; Qxd5 the same for White; both players playing both boards; exd4 on the auxiliary board removing the white pawn for good and returning the black pawn to d7. Both screens agreed on both boards; no errors. Frames checked by eye.
+
+
+## The CPU (after Stage 6, Caleb's request)
+
+| Item | Choice |
+| --- | --- |
+| Where | Home → **Play the CPU**: the setup screen (mode, mode options, time control) with a **Difficulty** choice, then the usual game screen with "CPU (level)" as the opponent. Colors are random; Rematch (colors swap) and Back to mode pick work as in a room. No room or internet connection is needed. |
+| Rules | The CPU plays through the same rules engine and the same match code as the host's device in a room (`src/cpu/brain.ts`), so it cannot play a rule differently. Every decision a mode asks for is covered: moves (and Bario's types, promotions, Revival's two boards), Mega Knight's roll and mega knight moves, Remorse's extra move or skipping it, Rental's units to give up (the cheapest first), Revival's placements. A safety net plays any legal move if an answer cannot be played, so a game never stalls. |
+| Thinking | In a background worker (`src/cpu/worker.ts`), so the board and effects stay smooth. It answers after at least about half a second, so its moves do not land instantly. |
+| Easy | Mostly random legal moves, but it takes a capture (the biggest) about 70% of the time when one is there; rolls in Mega Knight now and then. |
+| Normal | Searches two moves ahead and picks at random among moves within a third of a pawn of the best, for variety. |
+| Hard | Searches deeper (iterative deepening up to four moves) within about 1.5 seconds, and plays the best move found. |
+| What it values | Material (pawn 1, knight 3, bishop 3.2, rook 5, queen 9, Bario's Quantum 5), the centre and advanced pawns, giving check; per mode: palace pieces (and danger when a palace is down to one) in Bastille, the treasury and rent in Rental, pieces waiting on the auxiliary board in Revival, keeping its king away from mega knights, Remorse statuses (a devastated piece is worth little). Wins and losses as each mode defines them. Dice are not predicted; Mega Knight's roll is valued as a one-in-six chance of the best mega knight move. |
+| Clocks | Run as usual. The CPU's thinking uses its own clock, so on very short time controls it can lose on time. |
 
 ## Testing (Stage 3)
 

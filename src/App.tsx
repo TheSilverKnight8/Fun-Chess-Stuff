@@ -2,7 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router';
 import { DialogHost } from './components/dialogs';
 import { useSettings } from './lib/settings';
 import { Home } from './pages/Home';
-import { RoomPage } from './pages/Room';
+import { CpuPage, RoomPage } from './pages/Room';
 import { SettingsPage } from './pages/Settings';
 import { ManualsPage } from './guide/Guide';
 
@@ -12,6 +12,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/room" element={<RoomPage />} />
+        <Route path="/cpu" element={<CpuPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/guide" element={<ManualsPage />} />
         <Route path="/guide/:mode" element={<ManualsPage />} />
