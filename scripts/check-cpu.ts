@@ -49,7 +49,7 @@ for (const mode of MODES)
     console.log(`  ${mode.padEnd(10)} ${lv.padEnd(6)} ${String(r.actions).padStart(4)} actions, ${r.result ? `${r.result.reason}${r.result.winner ? ' ' + r.result.winner : ''}` : 'unfinished'}; think avg ${r.avg.toFixed(0)} ms, worst ${r.worst.toFixed(0)} ms`);
   }
 
-console.log('\\nStrength in Standard Chess (colors alternate; games capped, unfinished counts apart):');
+console.log('\nStrength in Standard Chess (colors alternate; games capped, unfinished counts apart):');
 for (const [a, b, n] of [['normal', 'easy', 6], ['hard', 'easy', 2]] as [Level, Level, number][]) {
   let wa = 0, wb = 0, d = 0;
   for (let i = 0; i < n; i++) {
@@ -62,6 +62,6 @@ for (const [a, b, n] of [['normal', 'easy', 6], ['hard', 'easy', 2]] as [Level, 
   }
   console.log(`  ${a} vs ${b}: ${wa} wins, ${wb} losses, ${d} draws or unfinished`);
 }
-console.log(failed ? '\\nSome checks FAILED' : '\\nAll checks passed');
+console.log(failed ? '\nSome checks FAILED' : '\nAll checks passed');
 process.exit(failed ? 1 : 0);
 void other;

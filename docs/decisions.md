@@ -338,6 +338,8 @@ Manuals for both modes, with scenes, are in the guidebook.
 | What it values | Material (pawn 1, knight 3, bishop 3.2, rook 5, queen 9, Bario's Quantum 5), the centre and advanced pawns, giving check; per mode: palace pieces (and danger when a palace is down to one) in Bastille, the treasury and rent in Rental, pieces waiting on the auxiliary board in Revival, keeping its king away from mega knights, Remorse statuses (a devastated piece is worth little). Wins and losses as each mode defines them. Dice are not predicted; Mega Knight's roll is valued as a one-in-six chance of the best mega knight move. |
 | Clocks | Run as usual. The CPU's thinking uses its own clock, so on very short time controls it can lose on time. |
 
+Testing (`npm run check:cpu`, CPU against CPU): every mode at every level played without a single refused or missing answer (Easy games to the end; Normal capped at 120 actions, Hard at 40, to keep the check short). Games ended by checkmate, palace, crushed king, treasury, repetition, stalemate and insufficient material along the way. Thinking time per move: Easy under 1 ms; Normal 4–112 ms on average (worst 0.3 s, Bario); Hard 0.2–1.4 s on average (worst 1.6 s). Strength in Standard Chess: Normal beat Easy 6–0, Hard beat Easy 2–0. In the browser: a game against Hard on its own worker, answering in about a second, no errors.
+
 ## Testing (Stage 3)
 
 - `npm run check:rules` adds 10 Bastille checks (no check, king capture, palace wins including self-inflicted and both-at-once, castling) and 18 Pot-Hole checks (blocked lines, knights jumping, pawns, castling, checks across a pothole, kings not capturable, dice: odd roll, re-roll off a king, closing, random duration, one at a time, repetition).
