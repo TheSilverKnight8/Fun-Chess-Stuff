@@ -12,7 +12,7 @@ Macro to micro, with a test checkpoint at the end of each stage. Each mode stage
 4. **Remorse and Mega Knight**, plus the guidebook (Caleb's request). **(done)**
 5. **Bario and Rental.** **(done)**
 6. **Revival.** **(done)**
-7. **Tuning** from Caleb's playtests.
+7. **Tuning** from Caleb's playtests. **(in progress)**
 
 ## Caleb's answers
 
@@ -38,6 +38,7 @@ Macro to micro, with a test checkpoint at the end of each stage. Each mode stage
 | Stage 5 rule questions, effects and music | "Build stage 4 first with your picks, then stage 5": Claude Code's picks below, its effects and its music. |
 | Revival's view (Stage 6) | Only the main board is visible; a button switches to the auxiliary board with an effect. Units moving between boards show an effect leaving, then the view switches to the other board by itself, then an effect entering. |
 | Revival's rules (Stage 6) | Claude Code's picks 1–9 below; Caleb answered with the view design and did not change them. |
+| Stage 7 (tuning, from playtests) | Make the big effects (Revival's board switch, every dice outcome) slower and more telegraphed; better sync between the visuals, especially in Revival; the CPU thinks longer so players can look at the board; the CPU accepts draw offers; Revival's auxiliary board is the dead board, dark, with an equally dramatic transition (something like a color inversion). Also suggested: keeping attack lines visible and pre-move visualizations (asked about before building). |
 | Mega Knight: four failed rolls repeat the position (asked after Stage 5) | Caleb: "you decide". A roll that does nothing does not count as another occurrence of the position for threefold repetition; repetitions come from moves. It still counts as a move for the fifty-move rule (spec). |
 | Revival: where the view ends up after pieces change boards | Caleb: "you decide". After the arrival effect the view goes back to the board the player last chose with the button (the main board unless they flipped), unless they have a piece to place (then it stays on that piece's board). |
 | A CPU opponent (after Stage 6) | Caleb: "I would like one with three difficulty levels", which overrides the spec's "No CPU opponent" (SPEC section 2; SPEC.md itself is Caleb's and is left as written). Claude Code's plan, approved ("go ahead"): every mode, Easy / Normal / Hard, the same setup screen as a room plus a difficulty, random colors, clocks as usual, works offline. |
@@ -314,7 +315,7 @@ Manuals for both modes, with scenes, are in the guidebook.
 ### How it is shown
 
 - One board at a time (Caleb's design). Under the board, a bar with **Auxiliary board (n)** / **Main board** to flip the view (a quick tilt-and-flash flip with a whoosh), and what is left of the turn: "Main move: to do · Aux move: done".
-- The auxiliary board has a navy wash over its squares, so it never looks like the main board.
+- The auxiliary board has a navy wash over its squares, so it never looks like the main board. (Stage 7: replaced by the dark dead board, below.)
 - When a piece has to be placed, its owner's view switches to that board and the possible squares get dashed boxes (red when choosing a piece to remove); the other player sees "Your opponent is placing a piece…".
 - Pieces changing boards, one after another: the view shows the board it leaves; it rises out in a column of light (red leaving the main board, gold leaving the auxiliary board); the view flips to the other board; it lands in a beam with a ring and a small shake. A piece captured on the auxiliary board crumbles to grey dust with "GONE".
 - Music: **Second Life**, B minor turning to D major and back, 88 beats a minute, a hymn-like triangle lead over a slow rising bass. Its manual is in the guidebook.
@@ -339,6 +340,28 @@ Manuals for both modes, with scenes, are in the guidebook.
 | Clocks | Run as usual. The CPU's thinking uses its own clock, so on very short time controls it can lose on time. |
 
 Testing (`npm run check:cpu`, CPU against CPU): every mode at every level played without a single refused or missing answer (Easy games to the end; Normal capped at 120 actions, Hard at 40, to keep the check short). Games ended by checkmate, palace, crushed king, treasury, repetition, stalemate and insufficient material along the way. Thinking time per move: Easy under 1 ms; Normal 4–112 ms on average (worst 0.3 s, Bario); Hard 0.2–1.4 s on average (worst 1.6 s). Strength in Standard Chess: Normal beat Easy 6–0, Hard beat Easy 2–0. In the browser: a game against Hard on its own worker, answering in about a second, no errors.
+
+## Tuning (Stage 7)
+
+| Item | Choice (Claude Code's, revisable) |
+| --- | --- |
+| Pot-Hole's dice | About 2.5 times slower. The six-sided die tumbles for about a second and lands, then a label holds for about a second and a half with the verdict ("4: even, a pothole opens", "5: odd, nothing", "even, but one is open"); then the file and rank dice tumble and land, the crosshair drops, and the square cracks open about 3.6 s after the move (1.3 s more per re-roll off a king). |
+| Mega Knight's roll | The die tumbles for 0.9 s, then "6! Move the mega knight" or "n: nothing" holds for about 1.4 s. The mega knight's leap takes 0.9 s instead of 0.5 s. |
+| Remorse's capture roll | The die over the capturing piece tumbles for 0.8 s and lands; the status word rises 0.3 s later and holds longer. |
+| Banners | Every banner (checkmate, draws, palace fallen, cycle reset, rent, and so on) sweeps in and out more slowly and stays 1.5 times as long. |
+| Overlapping rolls | A new roll clears what is left of the last one's dice and label, so two verdicts never overlap (this happened when a move came quickly after the CPU's). |
+| Revival: the dead board | The auxiliary board is drawn dark (slate and near-black squares, a dark border with a faint red glow, a vignette). Pieces on it get a pale glow so both colors stay readable; placement boxes turn pale. |
+| Revival: the switch | In two halves, 1.35 s in all. To the dead board: the living board inverts its colors and sinks into black while ink spreads over the screen, then the dead board flickers in through two inverted flashes. Back to the main board: the dead board burns white and fades, a flash of light covers the screen, and the main board comes out of the glare. The button and the automatic switches use the same transition. |
+| Revival: sync | Each step now waits for the one before it: the move slides first; the view turns to the board a piece leaves (if needed) and the turn finishes before it rises out (1 s); the view turns to the other board and finishes before the piece's beam lands (1 s). An arriving piece is hidden until its beam lands, instead of already standing there. The board takes no moves until the pieces have finished changing boards. |
+| CPU: thinking time | The CPU answers after at least 1.4 s (Easy), 1.9 s (Normal) or 2.4 s (Hard), and that pause starts only after the effects of the last action have finished (dice, pieces changing boards). Its clock runs during the pause, as before. |
+| CPU: draw offers | The CPU accepts every draw offer, 0.9 s after it is made (so the offer is seen first). |
+
+## Testing (Stage 7)
+
+- `npm run check:rules`, `npm run typecheck` and `npm run build` pass.
+- Two-browser Revival run (the Stage 6 script with longer waits): all checks passed, no errors; frames of the switch to the dead board checked by eye (capture, piece rising, ink veil, inverted flash, dark board with the placement boxes).
+- CPU (Normal): replied 1.9 s after the move; a draw offer showed first and was accepted about a second later; no errors.
+- Pot-Hole against the CPU: an odd and an even roll filmed frame by frame (verdict labels, file and rank dice, crosshair, crack). Mega Knight: a roll of 6 with its label.
 
 ## Testing (Stage 3)
 

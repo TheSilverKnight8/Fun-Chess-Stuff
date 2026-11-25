@@ -9,6 +9,7 @@
 import { other, type Color, type Move } from '../chess/types';
 import { findLegal, legalMoves, play } from '../chess/standard';
 import { createStore } from '../lib/store';
+import { effectsMs } from '../effects/fx';
 import type { CpuAction, Level } from '../cpu/brain';
 import type { ModeId } from '../modes';
 import { Room, RoomError, type RoomMessage } from '../net/room';
@@ -350,6 +351,9 @@ export function setCpuLevel(level: Level) {
   if (roomStore.get().cpu) patch({ cpu: level });
 }
 
+/** The CPU's least time to reply, in ms (Claude Code's call). */
+const CPU_PAUSE: Record<Level, number> = { easy: 1400, normal: 1900, hard: 2400 };
+
 let worker: Worker | null = null;
 let cpuAsk = 0;
 let cpuTimer: number | undefined;
@@ -363,10 +367,13 @@ function scheduleCpu() {
   const ask = ++cpuAsk;
   const askedAt = now();
   const pos = match.game.pos;
+  // Stage 7 (Caleb): the CPU takes longer, so there is time to look at the board, and it waits for
+  // the effects of the last action (dice, pieces changing boards) to finish first.
+  const pause = CPU_PAUSE[s.cpu] + effectsMs(match);
   worker ??= new Worker(new URL('../cpu/worker.ts', import.meta.url), { type: 'module' });
   worker.onmessage = (e: MessageEvent<{ id: number; action: CpuAction | null }>) => {
     if (e.data.id !== cpuAsk) return;
-    const wait = Math.max(0, (s.cpu === 'easy' ? 450 : 650) - (now() - askedAt));
+    const wait = Math.max(0, pause - (now() - askedAt));
     window.clearTimeout(cpuTimer);
     cpuTimer = window.setTimeout(() => cpuPlay(e.data.action), wait);
   };
@@ -594,6 +601,18 @@ export function playerDraw(a: 'offer' | 'accept' | 'decline') {
     if (next) {
       match = next;
       publish();
+      // Stage 7 (Caleb): the CPU accepts every draw offer, after a moment so the offer is seen.
+      if (a === 'offer' && s.cpu) {
+        const number = match.number;
+        window.setTimeout(() => {
+          if (!match || match.result || match.number !== number || match.drawOffer !== match.hostColor) return;
+          const done = answerDraw(match, other(match.hostColor), true, now());
+          if (done) {
+            match = done;
+            publish();
+          }
+        }, 900);
+      }
     }
   } else room?.send({ t: 'draw', a });
 }

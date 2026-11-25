@@ -4,7 +4,7 @@ import { other, type Color } from '../chess/types';
 import { plyOf, type GameView } from '../game/match';
 import { setTension } from '../lib/audio/music';
 import { PIECE_VALUE, sfx } from '../lib/audio/sfx';
-import { MK_LAND, ROLL, SLIDE_MS, emitFx, openAt } from './fx';
+import { MK_LAND, MK_ROLL, REMORSE_ROLL, ROLL, SLIDE_MS, emitFx, openAt } from './fx';
 
 // Watches the game as it changes and starts the matching effects and sounds:
 // a new game, each move (capture, castling, promotion, check), Pot-Hole's
@@ -157,7 +157,7 @@ export function useGameFx(game: GameView, me: Color, reconnecting: boolean) {
       const d6 = game.mkRoll.d6;
       emitFx({ t: 'mkroll', d6 });
       sfx.dice();
-      later(450, () => (d6 === 6 ? sfx.six() : sfx.diceLand(false)));
+      later(MK_ROLL.land, () => (d6 === 6 ? sfx.six() : sfx.diceLand(false)));
     }
     // Mega Knight: four knights became a mega knight.
     if (!newGame && moved && game.formed.length) {
@@ -169,8 +169,9 @@ export function useGameFx(game: GameView, me: Color, reconnecting: boolean) {
       const ev = game.remorse;
       emitFx({ t: 'remorse', ev });
       if (ev.d6 !== null) {
-        later(SLIDE_MS + 150, () => sfx.dice(true));
-        later(SLIDE_MS + 600, () => sfx.status(ev.status));
+        later(REMORSE_ROLL.start, () => sfx.dice(true));
+        later(REMORSE_ROLL.land, () => sfx.diceLand(false));
+        later(REMORSE_ROLL.word, () => sfx.status(ev.status));
       } else if (ev.bloodlust) later(SLIDE_MS + 300, () => sfx.status('bloodlust'));
       if (ev.absolved.length) later(SLIDE_MS + 100, () => sfx.halo());
       if (ev.selfCaptured.length) later(250, () => sfx.collapse());

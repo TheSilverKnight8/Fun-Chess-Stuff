@@ -216,6 +216,59 @@
 }
 
 /* Revival: the view flips over to the other board. */
+/* Revival (Stage 7): the auxiliary board is the dead board, dark. */
+.board-dead {
+  --sq-light: #3b4154;
+  --sq-dark: #1b1f2c;
+  --sq-dark-ink: #8e97ad;
+  --sq-last: rgb(252 63 63 / 0.34);
+  border-color: #0b0e16;
+  box-shadow: 0 0 28px rgb(252 63 63 / 0.28), 0 8px 0 #0b0e16;
+}
+.board-dead svg {
+  filter: drop-shadow(0 0 2px rgb(226 234 255 / 0.95)) drop-shadow(0 0 6px rgb(214 226 255 / 0.45));
+}
+.board-dead .pick-square:not(.pick-remove) {
+  border-color: #e2eaff;
+  background-color: rgb(226 234 255 / 0.12);
+}
+
+/* Revival's board switch, in two halves. To the dead board: the living board inverts
+   and sinks into black; the dead board flickers in through an inverted flash. Back to
+   the main board: the dead board burns white and the living board comes out of the glare. */
+@keyframes die-out {
+  0% { filter: none; transform: none; }
+  35% { filter: invert(1) hue-rotate(180deg) contrast(1.3); transform: scale(1.03) rotate(-0.6deg); }
+  100% { filter: invert(1) brightness(0.05); transform: scale(0.9) rotate(1deg); opacity: 0.6; }
+}
+@keyframes die-in {
+  0% { filter: brightness(0); transform: scale(0.9); }
+  25% { filter: invert(1) hue-rotate(180deg) contrast(1.6); transform: scale(1.04); }
+  45% { filter: brightness(0.2); transform: scale(0.99); }
+  62% { filter: invert(1) hue-rotate(180deg) contrast(1.4); }
+  100% { filter: none; transform: none; }
+}
+@keyframes revive-out {
+  0% { filter: none; transform: none; opacity: 1; }
+  100% { filter: brightness(4) saturate(0) blur(5px); transform: scale(1.08); opacity: 0.2; }
+}
+@keyframes revive-in {
+  0% { filter: brightness(4) saturate(0) blur(6px); transform: scale(1.06); opacity: 0.3; }
+  60% { filter: brightness(1.3); transform: scale(0.99); opacity: 1; }
+  100% { filter: none; transform: none; }
+}
+/* A veil over the whole screen during the switch: ink spreading out, or a flash of light. */
+@keyframes veil-dark {
+  0% { opacity: 0; transform: scale(0.2); }
+  40% { opacity: 0.9; transform: scale(1.6); }
+  100% { opacity: 0; transform: scale(2.4); }
+}
+@keyframes veil-light {
+  0% { opacity: 0; }
+  40% { opacity: 0.85; }
+  100% { opacity: 0; }
+}
+
 @keyframes board-flip {
   from {
     transform: perspective(1200px) rotateX(75deg) scale(0.9);

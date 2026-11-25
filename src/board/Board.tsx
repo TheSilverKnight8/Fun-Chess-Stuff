@@ -37,7 +37,8 @@ export interface BoardProps {
   /** Revival: squares to choose from (where a waiting piece goes, or which piece makes room). */
   pick?: { squares: number[]; onPick: (sq: number) => void; remove: boolean } | null;
   /** A wash over the whole board (Revival's auxiliary board). */
-  tint?: string | null;
+  /** Revival's auxiliary board: the dead board, drawn dark. */
+  dead?: boolean;
 }
 
 const PROMO_ORDER: PromoKind[] = ['Q', 'R', 'B', 'N'];
@@ -56,7 +57,7 @@ interface Drag {
   wasSelected: boolean;
 }
 
-export function Board({ pos, orientation, canMove, lastMove, showLegal, showLast, onMove, intro = false, fallen = null, drained = false, holeHidden = false, showTurns = false, onEvict = null, rentRise = null, pick = null, tint = null }: BoardProps) {
+export function Board({ pos, orientation, canMove, lastMove, showLegal, showLast, onMove, intro = false, fallen = null, drained = false, holeHidden = false, showTurns = false, onEvict = null, rentRise = null, pick = null, dead = false }: BoardProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [selected, setSelected] = useState<number | null>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
@@ -173,6 +174,7 @@ export function Board({ pos, orientation, canMove, lastMove, showLegal, showLast
       className={cx(
         'game-surface relative aspect-square w-full touch-none overflow-hidden rounded-md border-[3px] border-navy bg-[var(--sq-light)] shadow-card [container-type:inline-size]',
         drained && 'animate-drain',
+        dead && 'board-dead',
       )}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
@@ -191,10 +193,9 @@ export function Board({ pos, orientation, canMove, lastMove, showLegal, showLast
             className="absolute"
             style={{ left: `${col * 12.5}%`, top: `${row * 12.5}%`, width: '12.5%', height: '12.5%', background: light ? 'var(--sq-light)' : 'var(--sq-dark)' }}
           >
-            {tint && <div className="absolute inset-0" style={{ background: tint }} />}
             {isLast && <div className="absolute inset-0 bg-[var(--sq-last)]" />}
             {pick?.squares.includes(s) && (
-              <div className={cx('absolute inset-[5%] z-[3] animate-check-pulse rounded-md border-[3px] border-dashed', pick.remove ? 'border-accent bg-accent/25' : 'border-navy bg-navy/15')} />
+              <div className={cx('pick-square absolute inset-[5%] z-[3] animate-check-pulse rounded-md border-[3px] border-dashed', pick.remove ? 'pick-remove border-accent bg-accent/25' : 'border-navy bg-navy/15')} />
             )}
             {rentRise !== null && (
               <span className={cx('absolute right-[6%] top-[4%] font-mono text-[clamp(7px,1.5cqw,11px)] leading-none', light ? 'text-[var(--sq-dark-ink)]' : 'text-[var(--sq-light)]')}>{squareRent(s) + rentRise}</span>
@@ -231,7 +232,7 @@ export function Board({ pos, orientation, canMove, lastMove, showLegal, showLast
           <div
             key={`mk${i}`}
             data-mk={a}
-            className={cx('pointer-events-none absolute z-[1] transition-all duration-500 ease-out', mkFrom === a && 'drop-shadow-[0_0_10px_var(--accent)]')}
+            className={cx('pointer-events-none absolute z-[1] transition-all duration-[900ms] ease-in-out', mkFrom === a && 'drop-shadow-[0_0_10px_var(--accent)]')}
             style={{ left: `${col * 12.5}%`, top: `${row * 12.5}%`, width: '25%', height: '25%' }}
           >
             <MegaKnightArt />
@@ -288,6 +289,9 @@ export function Board({ pos, orientation, canMove, lastMove, showLegal, showLast
           <PieceArt color={pos.board[drag.from]!.color} kind={pos.board[drag.from]!.kind} className="h-full w-full drop-shadow-[0_6px_6px_rgb(0_38_87/0.25)]" />
         </div>
       )}
+
+      {/* Revival's dead board: a vignette over the dark squares. */}
+      {dead && <div className="pointer-events-none absolute inset-0 z-[2] bg-[radial-gradient(circle,transparent_50%,rgb(0_0_0/0.5))]" />}
 
       {/* Promotion: pick the new piece. */}
       {promo && (

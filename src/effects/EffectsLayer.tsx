@@ -3,7 +3,7 @@ import { findKing } from '../chess/standard';
 import { other, type Color, type Piece } from '../chess/types';
 import { PIECE_VALUE } from '../lib/audio/sfx';
 import { CREAM, INK, drawPiece } from '../board/pieceShapes';
-import { MK_LAND, ROLL, SLIDE_MS, onFx, openAt, type FxEvent } from './fx';
+import { MK_LAND, MK_ROLL, REMORSE_ROLL, ROLL, SLIDE_MS, onFx, openAt, type FxEvent } from './fx';
 import { megaSquares } from '../chess/standard';
 import type { RemorseEvent } from '../chess/remorse';
 import type { RentalEvent } from '../chess/rental';
@@ -21,6 +21,8 @@ interface Fx {
   /** performance.now() when it starts. */
   start: number;
   life: number;
+  /** Dice effects: a new roll clears what is left of the last one (so two verdicts never overlap). */
+  dice?: boolean;
   draw(ctx: CanvasRenderingContext2D, age: number, k: number, W: number, H: number): void;
 }
 
@@ -137,7 +139,12 @@ export function EffectsLayer({ shakeRef }: { shakeRef: RefObject<HTMLDivElement 
       if (list.length || shake > 0) raf = requestAnimationFrame(frame);
     }
 
-    const off = onFx((e) => handle(e, add, kick));
+    const off = onFx((e) => {
+      const isRoll = e.t === 'roll' || e.t === 'mkroll' || e.t === 'remorse';
+      if (!isRoll) return handle(e, add, kick);
+      for (let i = list.length - 1; i >= 0; i--) if (list[i].dice) list.splice(i, 1);
+      handle(e, (fx) => add({ ...fx, dice: true }), kick);
+    });
     return () => {
       off();
       cancelAnimationFrame(raf);
@@ -480,12 +487,12 @@ function dust(add: Add, cx: number, cy: number, size: number, delay: number) {
 function megaRoll(add: Add, kick: Kick, g: Geom, d6: number) {
   const mid = { x: g.x + g.size / 2, y: g.y + g.size / 2 };
   const from = { x: g.x - g.sq, y: g.y + g.size * 0.8 };
-  const size = g.sq * 1.2;
+  const size = g.sq * 1.4;
   add({
     layer: 'front',
-    life: 1300,
+    life: MK_ROLL.hold,
     draw(ctx, age, k) {
-      const p = Math.min(1, age / 450);
+      const p = Math.min(1, age / MK_ROLL.land);
       const e = easeOut(p);
       const x = from.x + (mid.x - from.x) * e;
       const y = from.y + (mid.y - from.y) * e - Math.abs(Math.sin(p * Math.PI * 3)) * (1 - p) * g.sq;
@@ -493,17 +500,18 @@ function megaRoll(add: Add, kick: Kick, g: Geom, d6: number) {
       if (p >= 1 && d6 === 6) {
         ctx.fillStyle = 'rgb(252 63 63 / 0.25)';
         ctx.beginPath();
-        ctx.arc(mid.x, mid.y, size * (1 + (age - 450) / 300), 0, Math.PI * 2);
+        ctx.arc(mid.x, mid.y, size * (1 + (age - MK_ROLL.land) / 500), 0, Math.PI * 2);
         ctx.fill();
       }
       ctx.translate(x, y);
       ctx.rotate((1 - e) * Math.PI * 4);
-      dieFace(ctx, size, p < 1 ? 1 + (Math.floor(age / 60) % 6) : d6, p >= 1 && d6 === 6);
+      dieFace(ctx, size, p < 1 ? 1 + (Math.floor(age / 90) % 6) : d6, p >= 1 && d6 === 6);
     },
   });
+  floatWord(add, mid.x, mid.y - g.sq * 1.3, g.sq * 1.2, d6 === 6 ? '6! Move the mega knight' : `${d6}: nothing`, d6 === 6 ? RED : INK, MK_ROLL.land + 50, MK_ROLL.hold - MK_ROLL.land);
   if (d6 === 6) {
-    kick(10, 450);
-    spark(add, mid.x, mid.y, size * 1.8, 450, RED);
+    kick(12, MK_ROLL.land);
+    spark(add, mid.x, mid.y, size * 1.8, MK_ROLL.land, RED);
   }
 }
 
@@ -552,14 +560,14 @@ function remorseFx(add: Add, kick: Kick, g: Geom, ev: RemorseEvent) {
       const d6 = ev.d6;
       add({
         layer: 'front',
-        delay: SLIDE_MS + 150,
-        life: 900,
+        delay: REMORSE_ROLL.start,
+        life: REMORSE_ROLL.word - REMORSE_ROLL.start + 900,
         draw(ctx, age, k) {
-          const p = Math.min(1, age / 420);
+          const p = Math.min(1, age / (REMORSE_ROLL.land - REMORSE_ROLL.start));
           ctx.globalAlpha = fadeOut(k, 0.7);
           ctx.translate(c.x, c.y - g.sq * (0.9 + 0.5 * easeOut(p)));
           ctx.rotate((1 - easeOut(p)) * Math.PI * 3);
-          dieFace(ctx, g.sq * 0.75, p < 1 ? 1 + (Math.floor(age / 60) % 6) : d6, false);
+          dieFace(ctx, g.sq * 0.9, p < 1 ? 1 + (Math.floor(age / 90) % 6) : d6, false);
         },
       });
     }
@@ -567,8 +575,8 @@ function remorseFx(add: Add, kick: Kick, g: Geom, ev: RemorseEvent) {
       const color = ev.status === 'guilt' ? '#3b6fb6' : ev.status === 'devastated' ? '#6d7c8c' : ev.status ? RED : INK;
       add({
         layer: 'front',
-        delay: SLIDE_MS + (ev.d6 === null ? 200 : 600),
-        life: 1300,
+        delay: ev.d6 === null ? SLIDE_MS + 300 : REMORSE_ROLL.word,
+        life: 2200,
         draw(ctx, _age, k) {
           ctx.globalAlpha = fadeOut(k, 0.6);
           const y = c.y - g.sq * (1.3 + 0.6 * easeOut(k));
@@ -583,8 +591,8 @@ function remorseFx(add: Add, kick: Kick, g: Geom, ev: RemorseEvent) {
         },
       });
       if (ev.status === 'psycho' || ev.status === 'bloodlust') {
-        spark(add, c.x, c.y, g.sq * 1.6, SLIDE_MS + 600, RED);
-        kick(ev.status === 'bloodlust' ? 14 : 7, SLIDE_MS + 600);
+        spark(add, c.x, c.y, g.sq * 1.6, REMORSE_ROLL.word, RED);
+        kick(ev.status === 'bloodlust' ? 14 : 7, REMORSE_ROLL.word);
       }
     }
   }
@@ -711,7 +719,7 @@ function dice(add: Add, kick: Kick, g: Geom, roll: Roll) {
   add({
     layer: 'front',
     delay: ROLL.dieStart,
-    life: (roll.opened !== null ? ROLL.d8Start : ROLL.dieLand + 450) - ROLL.dieStart,
+    life: (roll.opened !== null ? ROLL.d8Start : ROLL.dieLand + 1500) - ROLL.dieStart,
     draw(ctx, age, k) {
       const travel = ROLL.dieLand - ROLL.dieStart;
       const p = Math.min(1, age / travel);
@@ -719,13 +727,16 @@ function dice(add: Add, kick: Kick, g: Geom, roll: Roll) {
       const bounce = Math.abs(Math.sin(p * Math.PI * 3)) * (1 - p) * g.sq * 1.2;
       const x = from.x + (mid.x - from.x) * e;
       const y = from.y + (mid.y - from.y) * e - bounce;
-      const face = p < 1 ? 1 + (Math.floor(age / 60) % 6) : roll.d6;
-      ctx.globalAlpha = p < 1 ? 1 : fadeOut(k, 0.7);
+      const face = p < 1 ? 1 + (Math.floor(age / 90) % 6) : roll.d6;
+      ctx.globalAlpha = p < 1 ? 1 : fadeOut(k, 0.85);
       ctx.translate(x, y);
       ctx.rotate((1 - e) * Math.PI * 4);
       dieFace(ctx, d6Size, face, p >= 1 && roll.d6 % 2 === 0);
     },
   });
+  // The verdict, held long enough to read.
+  const even = roll.d6 % 2 === 0;
+  floatWord(add, mid.x, mid.y - g.sq * 1.1, g.sq * 1.2, even ? (roll.opened !== null ? `${roll.d6}: even, a pothole opens` : `${roll.d6}: even, but one is open`) : `${roll.d6}: odd, nothing`, even ? RED : INK, ROLL.dieLand + 50, 1500);
   if (roll.opened === null) return;
   // Each try: two eight-sided dice, then a crosshair on the square they picked.
   roll.tries.forEach((s, i) => {
@@ -739,7 +750,7 @@ function dice(add: Add, kick: Kick, g: Geom, roll: Roll) {
       add({
         layer: 'front',
         delay: ROLL.d8Start + base,
-        life: ROLL.cross + 250 - ROLL.d8Start,
+        life: ROLL.cross + 600 - ROLL.d8Start,
         draw(ctx, age, k) {
           const travel = ROLL.d8Land - ROLL.d8Start;
           const p = Math.min(1, age / travel);
@@ -749,7 +760,7 @@ function dice(add: Add, kick: Kick, g: Geom, roll: Roll) {
           ctx.globalAlpha = fadeOut(k, 0.75);
           ctx.translate(x, y);
           ctx.rotate((1 - e) * -Math.PI * 3);
-          d8Face(ctx, g.sq * 0.95, p < 1 ? (j ? String(1 + (Math.floor(age / 55) % 8)) : 'abcdefgh'[Math.floor(age / 55) % 8]) : label);
+          d8Face(ctx, g.sq * 1.1, p < 1 ? (j ? String(1 + (Math.floor(age / 90) % 8)) : 'abcdefgh'[Math.floor(age / 90) % 8]) : label);
         },
       });
     });
@@ -759,7 +770,7 @@ function dice(add: Add, kick: Kick, g: Geom, roll: Roll) {
       delay: ROLL.cross + base,
       life: landed ? ROLL.open - ROLL.cross + 150 : ROLL.reroll,
       draw(ctx, age) {
-        const drop = Math.min(1, age / 150);
+        const drop = Math.min(1, age / 350);
         const r = g.sq * (1.6 - 1.1 * easeOut(drop));
         ctx.strokeStyle = RED;
         ctx.lineWidth = g.sq * 0.06;
@@ -1165,7 +1176,7 @@ function killSpark(add: Add, cx: number, cy: number, winner: Color, delay: numbe
   add({
     layer: 'back',
     delay,
-    life: 2200,
+    life: 3200,
     draw(ctx, age, k, W, H) {
       ctx.globalAlpha = k < 0.05 ? k / 0.05 : fadeOut(k, 0.55);
       ctx.fillStyle = RED;
@@ -1214,14 +1225,16 @@ function burst(add: Add, cx: number, cy: number, sq: number, delay: number) {
  * The Portal's staggered stripes sweep across the screen, with a word on the
  * navy band (or no word: the game-start sweep).
  */
-function banner(add: Add, text: string | null, delay: number, life: number) {
+function banner(add: Add, text: string | null, delay: number, life0: number) {
+  const life = Math.round(life0 * 1.5);
   add({
     layer: 'front',
     delay,
     life,
     draw(ctx, age, _k, W, H) {
-      const IN = 260;
-      const OUT = 280;
+      // Stage 7 (Caleb): slower, more telegraphed: the stripes sweep in and out more slowly and hold longer.
+      const IN = 480;
+      const OUT = 420;
       const band = text ? Math.min(H * 0.15, W * 0.16) : Math.min(H * 0.05, 34);
       const bar = band * (text ? 0.16 : 0.45);
       const gap = bar * 0.7;

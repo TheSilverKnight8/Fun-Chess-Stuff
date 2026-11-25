@@ -61,10 +61,47 @@ export const SLIDE_MS = 150;
  * crosshair drops on the square (again for each re-roll off a king); then the
  * square cracks open.
  */
-export const ROLL = { dieStart: SLIDE_MS + 100, dieLand: SLIDE_MS + 550, d8Start: SLIDE_MS + 700, d8Land: SLIDE_MS + 1050, cross: SLIDE_MS + 1100, reroll: 700, open: SLIDE_MS + 1300 };
+// Stage 7 (Caleb): slower and more telegraphed: the die lands, its verdict is shown, then the file and rank dice roll.
+export const ROLL = { dieStart: SLIDE_MS + 150, dieLand: SLIDE_MS + 1050, d8Start: SLIDE_MS + 2050, d8Land: SLIDE_MS + 2850, cross: SLIDE_MS + 3000, reroll: 1300, open: SLIDE_MS + 3500 };
 
 /** When the pothole cracks open, or null if none opens. */
 export const openAt = (roll: Roll) => (roll.opened === null ? null : ROLL.open + (roll.tries.length - 1) * ROLL.reroll);
 
-/** Mega Knight: when a leaping mega knight lands (it moves over 0.5 s on the board). */
-export const MK_LAND = 480;
+/** Mega Knight: when a leaping mega knight lands (it moves over 0.9 s on the board). */
+export const MK_LAND = 900;
+
+/** Mega Knight's roll (Stage 7: slower): the die lands, then its verdict holds. */
+export const MK_ROLL = { land: 900, hold: 2300 };
+/** Remorse's capture roll (Stage 7: slower): the die over the piece lands, then the status word rises. */
+export const REMORSE_ROLL = { start: SLIDE_MS + 200, land: SLIDE_MS + 1000, word: SLIDE_MS + 1300 };
+
+/**
+ * Revival (Stage 7: slower, and in step): the move slides first; then for each
+ * piece changing boards the view turns to its board if needed, it leaves, the
+ * view turns to the other board (the old board goes out, the new one comes in),
+ * and it arrives. A piece arriving stays hidden until its beam lands.
+ */
+export const REVIVAL = { lead: SLIDE_MS + 300, flipOut: 600, flipIn: 750, leave: 1000, settle: 200, enter: 1000, reveal: 380, back: 600 };
+export const FLIP_MS = REVIVAL.flipOut + REVIVAL.flipIn;
+
+/** Revival: how long a set of board changes takes to show (at most two flips each, plus the flip back). */
+export function revivalMs(transfers: { gone?: boolean; to: unknown }[]) {
+  if (!transfers.length) return 0;
+  let t = REVIVAL.lead;
+  for (const tr of transfers) {
+    t += FLIP_MS + REVIVAL.leave;
+    if (tr.gone) continue;
+    t += FLIP_MS + REVIVAL.settle + (tr.to ? REVIVAL.enter : 300);
+  }
+  return t + REVIVAL.back + FLIP_MS;
+}
+
+/** How long the effects of the last action take to show, so the CPU waits for them before it replies. */
+export function effectsMs(m: { roll: Roll | null; remorse: RemorseEvent | null; mkRoll: unknown; transfers: { gone?: boolean; to: unknown }[]; rental: RentalEvent | null }) {
+  let t = 0;
+  if (m.roll) t = Math.max(t, openAt(m.roll) ?? ROLL.dieLand + 1500);
+  if (m.mkRoll) t = Math.max(t, MK_ROLL.hold);
+  if (m.remorse) t = Math.max(t, m.remorse.d6 !== null ? REMORSE_ROLL.word + 900 : 1200);
+  if (m.rental) t = Math.max(t, 1500);
+  return Math.max(t, revivalMs(m.transfers));
+}

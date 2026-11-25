@@ -5,7 +5,8 @@ import { Board } from '../board/Board';
 import { useGameManual } from '../guide/Guide';
 import { EffectsLayer } from '../effects/EffectsLayer';
 import { useClockTicks, useGameFx } from '../effects/useGameFx';
-import { useRevival } from '../effects/useRevival';
+import { useRevival, type FlipPhase } from '../effects/useRevival';
+import { FLIP_MS, REVIVAL } from '../effects/fx';
 import type { Level } from '../cpu/brain';
 import { setTension } from '../lib/audio/music';
 import { sfx } from '../lib/audio/sfx';
@@ -429,15 +430,15 @@ function GameScreen({ s, game, onLeave }: { s: RoomScreen; game: GameView; onLea
 
   const viewDone = revival ? (rv.view === 'main' ? revival.mainDone : revival.auxDone) : false;
   const board = (
-    <div key={`${game.number}-${rv.flips}`} className={cx(revival && rv.flips > 0 && 'animate-board-flip')}>
+    <div key={`${game.number}-${rv.flips}`} style={revival && rv.flip ? { animation: flipAnimation(rv.flip) } : undefined}>
     <Board
       key={game.number}
       pos={rv.shown ?? game.pos}
       orientation={me}
-      canMove={canMove && !viewDone && !head}
+      canMove={canMove && !viewDone && !head && !rv.busy}
       lastMove={!revival || (game.lastMove?.board ?? 'main') === rv.view ? game.lastMove : null}
       pick={head && head.owner === me && head.board === rv.view && !over ? { squares: head.options, onPick: playerPlace, remove: head.mode === 'displace' } : null}
-      tint={revival && rv.view === 'aux' ? 'rgb(0 38 87 / 0.18)' : null}
+      dead={!!revival && rv.view === 'aux'}
       showLegal={settings.legalMoves}
       showLast={settings.lastMove}
       onMove={(mv) => playerMove(revival ? { ...mv, board: rv.view } : mv)}
@@ -461,6 +462,13 @@ function GameScreen({ s, game, onLeave }: { s: RoomScreen; game: GameView; onLea
   return (
     <PlayLayout>
       <EffectsLayer shakeRef={shakeRef} />
+      {revival && rv.flip?.phase === 'out' && (
+        <div
+          key={rv.flips}
+          className={cx('pointer-events-none fixed inset-0 z-20', rv.flip.to === 'aux' ? 'bg-[radial-gradient(circle,#05070d_0%,#05070d_35%,transparent_70%)]' : 'bg-[#fff8ee]')}
+          style={{ animation: `${rv.flip.to === 'aux' ? 'veil-dark' : 'veil-light'} ${FLIP_MS}ms ease-out both` }}
+        />
+      )}
       <div ref={box} className="relative z-10 flex h-full w-full items-center justify-center overflow-hidden p-3">
         <div ref={shakeRef}>
         {size.w > 0 &&
@@ -494,6 +502,13 @@ function GameScreen({ s, game, onLeave }: { s: RoomScreen; game: GameView; onLea
 }
 
 /** Revival: which board is showing (with a button to flip to the other), and what is left of the turn. */
+/** Revival's board switch (Stage 7): the old board's way out, then the new board's way in. */
+function flipAnimation(f: NonNullable<FlipPhase>) {
+  const name = f.phase === 'out' ? (f.to === 'aux' ? 'die-out' : 'revive-out') : f.to === 'aux' ? 'die-in' : 'revive-in';
+  const ms = f.phase === 'out' ? REVIVAL.flipOut : REVIVAL.flipIn;
+  return `${name} ${ms}ms ${f.phase === 'out' ? 'cubic-bezier(0.5, 0, 0.8, 0.4)' : 'cubic-bezier(0.2, 0.8, 0.3, 1)'} both`;
+}
+
 function RevivalBar({ game, me, view, onView }: { game: GameView; me: Color; view: 'main' | 'aux'; onView: (v: 'main' | 'aux') => void }) {
   const r = game.pos.revival!;
   const head = r.queue[0];
