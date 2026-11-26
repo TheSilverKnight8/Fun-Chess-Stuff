@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
-import { BookOpen, Check, Coins, Dices, Flag, Layers, Zap, Handshake, Loader2, LogOut, Play, RefreshCw, Swords, UserRound, WifiOff } from 'lucide-react';
+import { BookOpen, Check, Crosshair, Coins, Dices, Layers, Zap, Handshake, Loader2, LogOut, Play, RefreshCw, Swords, UserRound, WifiOff } from 'lucide-react';
 import { Board } from '../board/Board';
 import { useGameManual } from '../guide/Guide';
 import { EffectsLayer } from '../effects/EffectsLayer';
@@ -40,7 +40,7 @@ import {
   type RoomScreen,
 } from '../game/session';
 import { CUSTOM_LIMITS, PRESETS, formatClock, sameTime, timeLabel, type TimeControl } from '../game/time';
-import { useSettings } from '../lib/settings';
+import { updateSettings, useSettings } from '../lib/settings';
 import { useStore } from '../lib/store';
 import { MODES, MODE_TRACK, modeInfo } from '../modes';
 
@@ -441,6 +441,7 @@ function GameScreen({ s, game, onLeave }: { s: RoomScreen; game: GameView; onLea
       dead={!!revival && rv.view === 'aux'}
       showLegal={settings.legalMoves}
       showLast={settings.lastMove}
+      showAttacks={settings.attacks}
       onMove={(mv) => playerMove(revival ? { ...mv, board: rv.view } : mv)}
       intro={game.pos.fullmove === 1 && game.pos.turn === 'w' && !over}
       fallen={fallen}
@@ -668,23 +669,41 @@ function Actions({ s, game, me, onLeave, onGuide }: { s: RoomScreen; game: GameV
           </Button>
         </div>
       )}
-      <div className="flex gap-2">
-        <Button size="md" press className="min-w-0 flex-1 px-2" disabled={!live || !!game.drawOffer} onClick={() => playerDraw('offer')}>
-          <Handshake className="size-4" />
+      <div className="flex w-full min-w-0 gap-1.5">
+        <Button size="md" press className="min-w-0 flex-1 px-1.5 text-sm" disabled={!live || !!game.drawOffer} onClick={() => playerDraw('offer')}>
           {game.drawOffer === me ? 'Draw offered' : 'Offer draw'}
         </Button>
-        <Button size="md" variant="danger" press className="min-w-0 flex-1 px-2" disabled={!live} onClick={() => void resign()}>
-          <Flag className="size-4" />
+        <Button size="md" variant="danger" press className="min-w-0 flex-1 px-1.5 text-sm" disabled={!live} onClick={() => void resign()}>
           Resign
         </Button>
-        <Button size="md" variant="ghost" press className="border-2 border-navy px-3" onClick={onGuide} title="Manual" aria-label="Open the manual">
+        <AttacksButton />
+        <Button size="md" variant="ghost" press className="border-2 border-navy px-2.5" onClick={onGuide} title="Manual" aria-label="Open the manual">
           <BookOpen className="size-4" />
         </Button>
-        <Button size="md" variant="ghost" press className="border-2 border-navy px-3" onClick={onLeave} title="Leave the room">
+        <Button size="md" variant="ghost" press className="border-2 border-navy px-2.5" onClick={onLeave} title="Leave the room">
           <LogOut className="size-4" />
         </Button>
       </div>
     </div>
+  );
+}
+
+/** Stage 7 (Caleb): shows or hides the squares each side attacks. */
+function AttacksButton() {
+  const { attacks } = useSettings();
+  return (
+    <Button
+      size="md"
+      variant={attacks ? 'primary' : 'ghost'}
+      press
+      className="border-2 border-navy px-2.5"
+      onClick={() => updateSettings({ attacks: !attacks })}
+      title={attacks ? 'Hide attacked squares' : 'Show attacked squares'}
+      aria-label="Show attacked squares"
+      aria-pressed={attacks}
+    >
+      <Crosshair className="size-4" />
+    </Button>
   );
 }
 

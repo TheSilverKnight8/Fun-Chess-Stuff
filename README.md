@@ -19,6 +19,7 @@ The app is built in stages, each tried before the next starts. What the app does
 | Manuals | A flipbook manual for every mode, with animated examples: Home → Manuals, or the book button during a game. |
 | Effects | Standard Chess: shattering captures, check lines, a full-screen checkmate burst with a falling king, castling streaks, promotion stripes, pieces dropping in at the start, draws that drain the board to grey, a pulsing and cracking clock, a tipping king on resignation. Bastille: walled palaces that crumble. Pot-Hole: tumbling dice, cracking potholes, asphalt patches. |
 | Sound | Music and sound effects made in the browser; no audio files. A menu theme (a rendition of Caleb's piano piece) and a track for each mode, which gets tenser during check and low time. |
+| Help while playing | Check lines stay up while the check lasts; a button marks the squares each side attacks; holding or pointing a piece at a square previews the move (what it would attack, whether it could be taken, a check). |
 | Settings | Brightness, music volume, effects volume, legal-move dots, last-move highlight. Kept until the app closes. |
 
 ## Run it on your computer

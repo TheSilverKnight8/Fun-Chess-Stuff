@@ -216,6 +216,28 @@
 }
 
 /* Revival: the view flips over to the other board. */
+/* Stage 7: squares each side attacks. The opponent's: a red corner at the top left;
+   yours: a navy corner at the bottom right. */
+.attack-theirs {
+  background: linear-gradient(135deg, rgb(252 63 63 / 0.85) 0 18%, rgb(252 63 63 / 0.14) 18% 100%);
+}
+.attack-mine {
+  background: linear-gradient(315deg, var(--attack-mine) 0 18%, transparent 18% 100%);
+}
+:root {
+  --attack-mine: rgb(0 38 87 / 0.75);
+}
+.board-dead {
+  --attack-mine: rgb(226 234 255 / 0.8);
+}
+/* Check lines march toward the king. */
+.check-line line {
+  animation: check-march 0.9s linear infinite;
+}
+@keyframes check-march {
+  to { stroke-dashoffset: -38; }
+}
+
 /* Revival (Stage 7): the auxiliary board is the dead board, dark. */
 .board-dead {
   --sq-light: #3b4154;

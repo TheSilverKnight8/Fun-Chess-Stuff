@@ -1,8 +1,8 @@
 import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { findKing, inCheck, legalMoves, megaSquares } from '../chess/standard';
+import { attacks, blockedOf, checkers, findKing, givesCheck, inCheck, isAttacked, legalMoves, megaSquares, play, quantumAvail } from '../chess/standard';
 import { palaceCount } from '../chess/status';
 import { squareRent } from '../chess/rental';
-import { KIND_NAME, fileOf, rankOf, sq, type Piece, type Color, type Move, type MoveInfo, type Position, type PromoKind } from '../chess/types';
+import { KIND_NAME, fileOf, other, rankOf, sq, type Piece, type Color, type Move, type MoveInfo, type Position, type PromoKind } from '../chess/types';
 import { cx } from '../components/ui';
 import { PieceArt } from './PieceArt';
 
@@ -39,6 +39,8 @@ export interface BoardProps {
   /** A wash over the whole board (Revival's auxiliary board). */
   /** Revival's auxiliary board: the dead board, drawn dark. */
   dead?: boolean;
+  /** Stage 7 (Caleb): mark every square each side attacks (a button during play). */
+  showAttacks?: boolean;
 }
 
 const PROMO_ORDER: PromoKind[] = ['Q', 'R', 'B', 'N'];
@@ -57,13 +59,15 @@ interface Drag {
   wasSelected: boolean;
 }
 
-export function Board({ pos, orientation, canMove, lastMove, showLegal, showLast, onMove, intro = false, fallen = null, drained = false, holeHidden = false, showTurns = false, onEvict = null, rentRise = null, pick = null, dead = false }: BoardProps) {
+export function Board({ pos, orientation, canMove, lastMove, showLegal, showLast, onMove, intro = false, fallen = null, drained = false, holeHidden = false, showTurns = false, onEvict = null, rentRise = null, pick = null, dead = false, showAttacks = false }: BoardProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [selected, setSelected] = useState<number | null>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
   /** Promotion (choose a piece) or Bario (choose what an undefined Quantum becomes): the choices offered. */
   const [promo, setPromo] = useState<{ from: number; to: number; kinds: PromoKind[]; field: 'promo' | 'define' } | null>(null);
   const [mkPick, setMkPick] = useState<number | null>(null);
+  /** The square under the mouse while a piece is picked (for the preview). */
+  const [hover, setHover] = useState<number | null>(null);
 
   const moves = useMemo(() => (canMove ? legalMoves(pos) : []), [pos, canMove]);
   // Forget a selection that no longer makes sense (the position changed under it).
@@ -145,6 +149,10 @@ export function Board({ pos, orientation, canMove, lastMove, showLegal, showLast
   };
 
   const onPointerMove = (e: ReactPointerEvent) => {
+    if (!drag && e.pointerType === 'mouse') {
+      const h = sel !== null ? squareAt(e.clientX, e.clientY) : null;
+      if (h !== hover) setHover(h);
+    }
     if (!drag || e.pointerId !== drag.pointerId) return;
     const moving = drag.moving || Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) > DRAG_START_PX;
     setDrag({ ...drag, ...fraction(e.clientX, e.clientY), moving });
@@ -165,7 +173,16 @@ export function Board({ pos, orientation, canMove, lastMove, showLegal, showLast
 
   const hoverSquare = drag?.moving ? squareAt(...toClient(ref.current, drag)) : null;
   const checkSq = inCheck(pos) ? findKing(pos, pos.turn) : null;
+  // Stage 7 (Caleb): the lines from each checking piece to the king stay on screen while the check lasts.
+  const checkLines = checkSq !== null ? checkers(pos) : [];
+  const attacked = useMemo(() => (showAttacks ? attackMap(pos, orientation) : null), [showAttacks, pos, orientation]);
   const pieces = pos.board.flatMap((p, s) => (p ? [{ p, s }] : []));
+  // Stage 7 (Caleb): the move preview. Holding a piece over a square it can move to (dragging, or
+  // pointing with the mouse after picking it) shows what would happen there: the squares it would
+  // attack, whether it could be taken there, and a check it would give.
+  const previewFrom = drag?.moving ? drag.from : sel;
+  const previewTo = drag?.moving ? hoverSquare : drag ? null : hover;
+  const preview = useMemo(() => (previewFrom !== null && previewTo !== null && previewTo !== previewFrom && !promo ? previewMove(pos, moves, previewFrom, previewTo) : null), [pos, moves, previewFrom, previewTo, promo]);
 
   return (
     <div
@@ -180,6 +197,7 @@ export function Board({ pos, orientation, canMove, lastMove, showLegal, showLast
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={() => setDrag(null)}
+      onPointerLeave={() => setHover(null)}
       onContextMenu={(e) => e.preventDefault()}
     >
       {/* Squares, last move, check, coordinates. */}
@@ -194,6 +212,13 @@ export function Board({ pos, orientation, canMove, lastMove, showLegal, showLast
             style={{ left: `${col * 12.5}%`, top: `${row * 12.5}%`, width: '12.5%', height: '12.5%', background: light ? 'var(--sq-light)' : 'var(--sq-dark)' }}
           >
             {isLast && <div className="absolute inset-0 bg-[var(--sq-last)]" />}
+            {attacked?.theirs[s] && <div className="attack-theirs absolute inset-0" />}
+            {attacked?.mine[s] && <div className="attack-mine absolute inset-0" />}
+            {preview?.reach.has(s) && <div className="absolute inset-[34%] z-[2] rounded-full border-[3px] border-[var(--attack-mine)]" />}
+            {preview && preview.to === s && (
+              <div className={cx('absolute inset-[3%] z-[2] rounded-md border-[4px]', preview.unsafe ? 'animate-check-pulse border-accent bg-accent/25' : 'border-[var(--attack-mine)]')} />
+            )}
+            {preview?.checks === s && <div className="absolute inset-0 z-[2] animate-check-pulse bg-accent/40" />}
             {pick?.squares.includes(s) && (
               <div className={cx('pick-square absolute inset-[5%] z-[3] animate-check-pulse rounded-md border-[3px] border-dashed', pick.remove ? 'pick-remove border-accent bg-accent/25' : 'border-navy bg-navy/15')} />
             )}
@@ -246,6 +271,32 @@ export function Board({ pos, orientation, canMove, lastMove, showLegal, showLast
         return <div key={`mt${m.to}`} className="pointer-events-none absolute z-[2] rounded-md border-4 border-dashed border-accent bg-accent/15" style={{ left: `${col * 12.5}%`, top: `${row * 12.5}%`, width: '25%', height: '25%' }} />;
       })}
 
+      {/* Check: a line from each checking piece to the king, for as long as the check lasts. */}
+      {checkSq !== null && checkLines.length > 0 && (
+        <svg className="pointer-events-none absolute inset-0 z-[1] h-full w-full" viewBox="0 0 800 800" aria-hidden>
+          {checkLines.map((c) => {
+            const a = place(c);
+            const k = place(checkSq);
+            const x1 = a.col * 100 + 50;
+            const y1 = a.row * 100 + 50;
+            const x2 = k.col * 100 + 50;
+            const y2 = k.row * 100 + 50;
+            const len = Math.hypot(x2 - x1, y2 - y1);
+            // Stop short of the king, with an arrowhead.
+            const ex = x2 - ((x2 - x1) / len) * 34;
+            const ey = y2 - ((y2 - y1) / len) * 34;
+            const ang = Math.atan2(y2 - y1, x2 - x1);
+            const head = (d: number) => `${ex + Math.cos(ang + d) * -22},${ey + Math.sin(ang + d) * -22}`;
+            return (
+              <g key={c} className="check-line">
+                <line x1={x1} y1={y1} x2={ex} y2={ey} stroke="var(--accent)" strokeWidth={9} strokeLinecap="round" strokeDasharray="22 16" opacity={0.75} />
+                <polygon points={`${ex + Math.cos(ang) * 10},${ey + Math.sin(ang) * 10} ${head(0.55)} ${head(-0.55)}`} fill="var(--accent)" opacity={0.85} />
+              </g>
+            );
+          })}
+        </svg>
+      )}
+
       {/* Pieces. Keyed by piece, so a moving piece slides to its new square. */}
       {pieces.map(({ p, s }) => {
         const { col, row } = place(s);
@@ -292,6 +343,21 @@ export function Board({ pos, orientation, canMove, lastMove, showLegal, showLast
 
       {/* Revival's dead board: a vignette over the dark squares. */}
       {dead && <div className="pointer-events-none absolute inset-0 z-[2] bg-[radial-gradient(circle,transparent_50%,rgb(0_0_0/0.5))]" />}
+
+      {/* The preview's ghost piece on the square, and what it means. */}
+      {preview && !drag?.moving && pos.board[preview.from] && (
+        <div className="pointer-events-none absolute z-[3] h-[12.5%] w-[12.5%] opacity-45" style={{ left: `${place(preview.to).col * 12.5}%`, top: `${place(preview.to).row * 12.5}%` }}>
+          <PieceArt color={pos.board[preview.from]!.color} kind={pos.board[preview.from]!.kind} className="h-full w-full" />
+        </div>
+      )}
+      {preview && (preview.unsafe || preview.checks !== null) && (
+        <div
+          className="pointer-events-none absolute z-[4] -translate-x-1/2 whitespace-nowrap rounded-sm border-2 border-navy bg-surface px-1.5 py-0.5 font-display text-[clamp(8px,2cqw,13px)] leading-none text-navy shadow-card"
+          style={{ left: `${(place(preview.to).col + 0.5) * 12.5}%`, top: place(preview.to).row === 0 ? '13.5%' : `${(place(preview.to).row - 0.42) * 12.5}%` }}
+        >
+          {[preview.checks !== null && 'Check', preview.unsafe && 'Can be taken'].filter(Boolean).join(' · ')}
+        </div>
+      )}
 
       {/* Promotion: pick the new piece. */}
       {promo && (
@@ -464,4 +530,49 @@ function PromotionPicker({ col, fromTop, color, kinds, label, onPick, onCancel }
       </div>
     </div>
   );
+}
+
+/** Stage 7: the squares each side attacks (where one of its pieces could capture), from this player's side. */
+function attackMap(pos: Position, me: Color) {
+  const hole = blockedOf(pos);
+  const them = other(me);
+  const qMe = quantumAvail(pos, me);
+  const qThem = quantumAvail(pos, them);
+  const mine: boolean[] = [];
+  const theirs: boolean[] = [];
+  for (let s = 0; s < 64; s++) {
+    mine.push(isAttacked(pos.board, s, me, hole, qMe));
+    theirs.push(isAttacked(pos.board, s, them, hole, qThem));
+  }
+  return { mine, theirs };
+}
+
+/**
+ * Stage 7: what a move would do, for the preview: the squares the moved piece
+ * would attack from its new square, whether the opponent could capture it
+ * there, and the king it would check. Null when it is not a legal move.
+ */
+function previewMove(pos: Position, moves: MoveInfo[], from: number, to: number) {
+  const m = moves.find((x) => x.from === from && x.to === to && !x.mk && (!x.promo || x.promo === 'Q'));
+  if (!m) return null;
+  let after: Position;
+  try {
+    after = play(pos, m);
+  } catch {
+    return null;
+  }
+  const me = pos.turn;
+  const them = other(me);
+  const hole = blockedOf(after);
+  const piece = after.board[to];
+  const reach = new Set<number>();
+  // Remorse: a devastated or guilt-ridden piece cannot capture, so it attacks nothing.
+  if (piece && piece.color === me && givesCheck(piece)) {
+    const q = quantumAvail(after, me);
+    for (let s = 0; s < 64; s++) if (s !== to && attacks(after.board, to, s, hole, q)) reach.add(s);
+  }
+  const unsafe = !!piece && piece.color === me && isAttacked(after.board, to, them, hole, quantumAvail(after, them));
+  const k = findKing(after, them);
+  const checks = k >= 0 && inCheck(after, them) ? k : null;
+  return { from, to, reach, unsafe, checks };
 }

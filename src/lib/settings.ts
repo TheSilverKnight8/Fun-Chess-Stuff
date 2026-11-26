@@ -14,6 +14,8 @@ export interface Settings {
   legalMoves: boolean;
   /** Mark the last move's two squares (Caleb: on by default). */
   lastMove: boolean;
+  /** Stage 7 (Caleb): mark the squares each side attacks (a button during play; off by default). */
+  attacks: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -22,6 +24,7 @@ export const DEFAULT_SETTINGS: Settings = {
   effectsVolume: 0.8,
   legalMoves: true,
   lastMove: true,
+  attacks: false,
 };
 
 export const settings = createStore<Settings>({ ...DEFAULT_SETTINGS });
